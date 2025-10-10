@@ -7,20 +7,14 @@
 (source
  (github username/reponame))
 
-(authors "Author Name <author@example.com>")
-
-(maintainers "Maintainer Name <maintainer@example.com>")
+(authors "Thomas Zachary <thomaszachary06@proton.me>")
 
 (license LICENSE)
 
-(documentation https://url/to/documentation)
-
 (package
  (name sqc)
- (synopsis "A short synopsis")
- (description "A longer description")
- (depends ocaml)
- (tags
-  ("add topics" "to describe" your project)))
+ (synopsis "A funny little compiler")
+ (description "How funny")
+ (depends ocaml))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
