@@ -1,0 +1,4 @@
+(executable
+ (public_name sqc)
+ (name main)
+ (libraries sqc))
