@@ -1,1 +1,1 @@
-let () = print_endline "Hello, World!"
+let () = Stdlib.print_endline "Hello, World!"

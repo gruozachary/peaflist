@@ -1,2 +1,3 @@
 (library
- (name sqc))
+ (name sqc)
+ (libraries base))
