@@ -22,6 +22,12 @@ val all : 'a t list -> 'a list t
 val all_unit : unit t list -> unit t
 (** Discards the result of a list of parsers *)
 
+val first_ok : 'a t -> 'a t -> 'a t
+(** Gets the first non-failing parser *)
+
+val many : 'a t -> 'a list t
+(** Creates a parser that repeatedly applies a parser until failure *)
+
 module Let_syntax : sig
   module Let_syntax : sig
     val return : 'a -> 'a t

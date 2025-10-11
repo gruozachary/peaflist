@@ -1,3 +1,4 @@
 (library
  (name sqc)
- (libraries base))
+ (libraries base)
+ (preprocess (pps ppx_let)))
