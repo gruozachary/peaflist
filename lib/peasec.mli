@@ -4,6 +4,9 @@ type 'a t
 val exec : 'a t -> Base.string -> 'a Base.Option.t
 (** A function that executes a parser with a given string*)
 
+val fix : ('a t -> 'a t) -> 'a t
+(* Combinator for recursion *)
+
 val satisfy : (Base.char -> Base.bool) -> Base.char t
 (** A parser that checks if the next character against a predicate *)
 

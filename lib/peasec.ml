@@ -51,6 +51,15 @@ let exec (p : 'a t) (inp : string) : 'a Option.t =
     (fun _ -> Option.None)
     Option.None
 
+let fix (f : 'a t -> 'a t) : 'a t =
+  let rec self :
+      'r.
+      string -> ('a -> string -> 'r) -> ('a -> 'r) -> (string -> 'r) -> 'r -> 'r
+      =
+   fun inp cok eok cerr eerr -> (f { run = self }).run inp cok eok cerr eerr
+  in
+  { run = self }
+
 let satisfy (f : char -> bool) : char t =
   {
     run =
