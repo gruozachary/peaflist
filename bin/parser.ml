@@ -46,14 +46,16 @@ module AST = struct
 end
 
 let id : AST.id t =
-  let%map first = letter
-  and rest = many (first_ok (first_ok letter digit) (char '_')) in
-  String.of_char_list (first :: rest)
+  lexeme
+    (let%map first = letter
+     and rest = many (first_ok (first_ok letter digit) (char '_')) in
+     String.of_char_list (first :: rest))
 
 (* TODO: this will result on a horrible disaster if there are too many digits *)
 and int : AST.int t =
-  let%map first = digit and rest = many digit in
-  Int.of_string (String.of_char_list (first :: rest))
+  lexeme
+    (let%map first = digit and rest = many digit in
+     Int.of_string (String.of_char_list (first :: rest)))
 
 let bin_op : AST.bin_op t =
   match%map
@@ -70,12 +72,8 @@ let expr : AST.expr t =
   fix (fun expr ->
       choice
         [
-          (let%map x = id in
-           AST.Id x);
-          (let%map x = int in
-           AST.Int x);
-          (let%map e1 = expr and e2 = expr in
-           AST.Apply (e1, e2));
+          (* (let%map e1 = expr and e2 = expr in
+           AST.Apply (e1, e2)); *)
           (let%map _ = symbol "(" and e = expr and _ = symbol ")" in
            AST.Group e);
           (let%map _ = symbol "fun"
@@ -94,8 +92,12 @@ let expr : AST.expr t =
            and es = sep_by_1 ~sep:(symbol ",") expr
            and _ = symbol "]" in
            AST.List es);
-          (let%map e1 = expr and o = bin_op and e2 = expr in
-           AST.BinOp (e1, o, e2));
+          (let%map x = id in
+           AST.Id x);
+          (let%map x = int in
+           AST.Int x);
+          (* (let%map e1 = expr and o = bin_op and e2 = expr in
+           AST.BinOp (e1, o, e2)); *)
         ])
 
 include Sqc.Peasec
