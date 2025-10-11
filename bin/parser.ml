@@ -57,48 +57,66 @@ and int : AST.int t =
     (let%map first = digit and rest = many digit in
      Int.of_string (String.of_char_list (first :: rest)))
 
-let bin_op : AST.bin_op t =
-  match%map
-    choice [ symbol "+"; symbol "-"; symbol "*"; symbol "/"; symbol "++" ]
-  with
-  | "+" -> AST.Plus
-  | "-" -> AST.Sub
-  | "*" -> AST.Mul
-  | "/" -> AST.Div
-  | "++" -> AST.Append
-  | _ -> assert false
+let rec expr () = choice [ binding (); lambda (); append () ]
 
-let expr : AST.expr t =
-  fix (fun expr ->
-      choice
-        [
-          (* (let%map e1 = expr and e2 = expr in
-           AST.Apply (e1, e2)); *)
-          (let%map _ = symbol "(" and e = expr and _ = symbol ")" in
-           AST.Group e);
-          (let%map _ = symbol "fun"
-           and x = id
-           and _ = symbol "->"
-           and e = expr in
-           AST.Lambda (x, e));
-          (let%map _ = symbol "let"
-           and x = id
-           and _ = symbol "="
-           and e1 = expr
-           and _ = symbol "in"
-           and e2 = expr in
-           AST.Binding (x, e1, e2));
-          (let%map _ = symbol "["
-           and es = sep_by_1 ~sep:(symbol ",") expr
-           and _ = symbol "]" in
-           AST.List es);
-          (let%map x = id in
-           AST.Id x);
-          (let%map x = int in
-           AST.Int x);
-          (* (let%map e1 = expr and o = bin_op and e2 = expr in
-           AST.BinOp (e1, o, e2)); *)
-        ])
+and binding () =
+  let%bind _ = symbol "let" in
+  let%bind x = id in
+  let%bind _ = symbol "=" in
+  let%bind e1 = expr () in
+  let%bind _ = symbol "in" in
+  let%map e2 = expr () in
+  AST.Binding (x, e1, e2)
+
+and lambda () =
+  let%map _ = symbol "fun" and x = id and _ = symbol "->" and e = expr () in
+  AST.Lambda (x, e)
+
+(* TODO: make this chain_right_1 *)
+and append () =
+  chain_left_1 (add ())
+    (let%map _ = atomic (symbol "++") in
+     fun l r -> AST.BinOp (l, AST.Append, r))
+
+and add () =
+  chain_left_1 (mul ())
+    (let%map x = first_ok (symbol "+") (symbol "-") in
+     fun l r ->
+       match x with
+       | "+" -> AST.BinOp (l, AST.Plus, r)
+       | "-" -> AST.BinOp (l, AST.Sub, r)
+       | _ -> assert false)
+
+and mul () =
+  chain_left_1 (apply ())
+    (let%map x = first_ok (symbol "*") (symbol "/") in
+     fun l r ->
+       match x with
+       | "*" -> AST.BinOp (l, AST.Mul, r)
+       | "/" -> AST.BinOp (l, AST.Div, r)
+       | _ -> assert false)
+
+and apply () =
+  let%bind x = atom () in
+  let%map xs = many (atom ()) in
+  List.fold ~init:x ~f:(fun f x -> AST.Apply (f, x)) xs
+
+and atom () =
+  choice
+    [
+      (let%map x = int in
+       AST.Int x);
+      (let%map x = id in
+       AST.Id x);
+      (let%bind _ = symbol "(" in
+       let%bind e = expr () in
+       let%map _ = symbol ")" in
+       AST.Group e);
+      (let%bind _ = symbol "[" in
+       let%bind es = sep_by_1 ~sep:(symbol ",") (expr ()) in
+       let%map _ = symbol "]" in
+       AST.List es);
+    ]
 
 include Sqc.Peasec
 include Sqc.Peasec.Let_syntax
