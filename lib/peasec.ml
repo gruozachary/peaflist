@@ -65,11 +65,21 @@ let first_ok pl pr =
         pl.run inp cok eok cerr (pr.run inp cok eok cerr eerr));
   }
 
-let rec many (p : 'a t) : 'a list t =
-  first_ok
-    ( p >>= fun x ->
-      many p >>| fun xs -> x :: xs )
-    (return [])
+let many_acc (p : 'a t) (acc : 'a -> 'a list -> 'a list) : 'a list t =
+  {
+    run =
+      (fun inp cok eok cerr eerr ->
+        let rec walk xs x inp' =
+          p.run inp'
+            (fun y -> walk (acc x xs) y)
+            (fun _ -> eerr)
+            cerr
+            (cok (acc x xs) inp')
+        in
+        p.run inp (walk []) (fun _ -> eerr) cerr (eok []));
+  }
+
+let many (p : 'a t) : 'a list t = map (many_acc p List.cons) ~f:List.rev
 
 let atomic (p : 'a t) =
   { run = (fun inp cok eok _ eerr -> p.run inp cok eok (fun _ -> eerr) eerr) }
