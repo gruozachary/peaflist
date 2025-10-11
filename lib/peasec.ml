@@ -92,7 +92,13 @@ let many_acc (p : 'a t) (acc : 'a -> 'a list -> 'a list) : 'a list t =
         p.run inp (walk []) (fun _ -> eerr) cerr (eok []));
   }
 
-let many (p : 'a t) : 'a list t = map (many_acc p List.cons) ~f:List.rev
+let many (p : 'a t) : 'a list t =
+  let%map xs = many_acc p List.cons in
+  List.rev xs
+
+let some (p : 'a t) : 'a list t =
+  let%map x = p and xs = many p in
+  x :: xs
 
 let atomic (p : 'a t) =
   { run = (fun inp cok eok _ eerr -> p.run inp cok eok (fun _ -> eerr) eerr) }
@@ -114,6 +120,16 @@ let sep_by_1 p ~sep =
        y)
   in
   return (x :: xs)
+
+let chain_left_1 p op =
+  let rec rest x =
+    first_ok
+      (let%bind f = op and y = p in
+       rest (f x y))
+      (return x)
+  in
+  let%bind x = p in
+  rest x
 
 let char c = satisfy (equal_char c)
 let letter = satisfy Char.is_alpha

@@ -31,6 +31,10 @@ val first_ok : 'a t -> 'a t -> 'a t
 val many : 'a t -> 'a list t
 (** Creates a parser that repeatedly applies a parser until failure *)
 
+val some : 'a t -> 'a list t
+(** Creates a parser that repeatedly applies a parser until failure, at least
+    one result *)
+
 val atomic : 'a t -> 'a t
 (** Returns a new parser that will not consume the input if there is an error *)
 
@@ -42,6 +46,9 @@ val choice : 'a t list -> 'a t
 
 val sep_by_1 : 'a t -> sep:'b t -> 'a list t
 (** Combinator that consumes a list separated by separators *)
+
+val chain_left_1 : 'a t -> ('a -> 'a -> 'a) t -> 'a t
+(** Consumes values in a left-associative way *)
 
 val char : Base.char -> Base.char t
 (** A parser that consumes a specific character *)
