@@ -34,6 +34,33 @@ val atomic : 'a t -> 'a t
 val eof : unit t
 (** A parser that checks that we are at the end of the input *)
 
+val char : Base.char -> Base.char t
+(** A parser that consumes a specific character *)
+
+val letter : Base.char t
+(** A parser that consumes a letter *)
+
+val digit : Base.char t
+(** A parser that consumes a digit *)
+
+val space : Base.char t
+(** A parser that consumes a whitespace character *)
+
+val spaces : unit t
+(** A parser that consumes whitespace characters *)
+
+val string : Base.string -> Base.string t
+(** A parser that consumes a specific string *)
+
+val lexeme : 'a t -> 'a t
+(** A parser that consumes all whitespace after the given parser *)
+
+val fully : 'a t -> 'a t
+(** A parser that consumes leading whitespace and checks for eof *)
+
+val symbol : Base.string -> Base.string t
+(** A combination of lexeme and string *)
+
 module Let_syntax : sig
   module Let_syntax : sig
     val return : 'a -> 'a t
