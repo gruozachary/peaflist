@@ -1,5 +1,5 @@
 (executable
  (public_name sqc)
  (name main)
- (libraries sqc base)
+ (libraries sqc base stdio)
  (preprocess (pps ppx_let)))
