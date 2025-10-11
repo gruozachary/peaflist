@@ -84,3 +84,10 @@ let many (p : 'a t) : 'a list t = map (many_acc p List.cons) ~f:List.rev
 
 let atomic (p : 'a t) =
   { run = (fun inp cok eok _ eerr -> p.run inp cok eok (fun _ -> eerr) eerr) }
+
+let eof =
+  {
+    run =
+      (fun inp _ eok _ eerr ->
+        if String.for_all ~f:Char.is_whitespace inp then eok () else eerr);
+  }

@@ -8,9 +8,24 @@ let digit = satisfy Char.is_digit
 let space = satisfy Char.is_whitespace
 let spaces = ignore_m (many space)
 
-let symbol p =
-  let%bind _ = spaces in
-  p
+let string s =
+  let rec string_check i =
+    if i < String.length s then
+      let%bind _ = char s.[i] in
+      string_check (i + 1)
+    else return s
+  in
+  string_check 0
+
+let lexeme p =
+  let%map x = p and _ = spaces in
+  x
+
+let fully p =
+  let%map _ = spaces and x = p and _ = eof in
+  x
+
+let symbol s = lexeme (string s)
 
 let id =
   let%map first = letter
