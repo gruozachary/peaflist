@@ -70,3 +70,6 @@ let rec many (p : 'a t) : 'a list t =
     ( p >>= fun x ->
       many p >>| fun xs -> x :: xs )
     (return [])
+
+let atomic (p : 'a t) =
+  { run = (fun inp cok eok _ eerr -> p.run inp cok eok (fun _ -> eerr) eerr) }

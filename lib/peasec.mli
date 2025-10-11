@@ -28,6 +28,9 @@ val first_ok : 'a t -> 'a t -> 'a t
 val many : 'a t -> 'a list t
 (** Creates a parser that repeatedly applies a parser until failure *)
 
+val atomic : 'a t -> 'a t
+(** Returns a new parser that will not consume the input if there is an error *)
+
 module Let_syntax : sig
   module Let_syntax : sig
     val return : 'a -> 'a t
