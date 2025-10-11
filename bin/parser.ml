@@ -47,14 +47,15 @@ end
 
 let id : AST.id t =
   lexeme
-    (let%map first = letter
-     and rest = many (first_ok (first_ok letter digit) (char '_')) in
+    (let%bind first = letter in
+     let%map rest = many (first_ok (first_ok letter digit) (char '_')) in
      String.of_char_list (first :: rest))
 
 (* TODO: this will result on a horrible disaster if there are too many digits *)
 and int : AST.int t =
   lexeme
-    (let%map first = digit and rest = many digit in
+    (let%bind first = digit in
+     let%map rest = many digit in
      Int.of_string (String.of_char_list (first :: rest)))
 
 let rec expr () = choice [ binding (); lambda (); append () ]
@@ -69,7 +70,10 @@ and binding () =
   AST.Binding (x, e1, e2)
 
 and lambda () =
-  let%map _ = symbol "fun" and x = id and _ = symbol "->" and e = expr () in
+  let%bind _ = symbol "fun" in
+  let%bind x = id in
+  let%bind _ = symbol "->" in
+  let%map e = expr () in
   AST.Lambda (x, e)
 
 (* TODO: make this chain_right_1 *)

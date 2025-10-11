@@ -97,7 +97,8 @@ let many (p : 'a t) : 'a list t =
   List.rev xs
 
 let some (p : 'a t) : 'a list t =
-  let%map x = p and xs = many p in
+  let%bind x = p in
+  let%map xs = many p in
   x :: xs
 
 let atomic (p : 'a t) =
@@ -116,7 +117,8 @@ let sep_by_1 p ~sep =
   let%bind x = p
   and xs =
     many
-      (let%map _ = sep and y = p in
+      (let%bind _ = sep in
+       let%map y = p in
        y)
   in
   return (x :: xs)
@@ -124,7 +126,8 @@ let sep_by_1 p ~sep =
 let chain_left_1 p op =
   let rec rest x =
     first_ok
-      (let%bind f = op and y = p in
+      (let%bind f = op in
+       let%bind y = p in
        rest (f x y))
       (return x)
   in
@@ -147,11 +150,14 @@ let string s =
   string_check 0
 
 let lexeme p =
-  let%map x = p and _ = spaces in
+  let%bind x = p in
+  let%map _ = spaces in
   x
 
 let fully p =
-  let%map _ = spaces and x = p and _ = eof in
+  let%bind _ = spaces in
+  let%bind x = p in
+  let%map _ = eof in
   x
 
 let symbol s = lexeme (string s)
