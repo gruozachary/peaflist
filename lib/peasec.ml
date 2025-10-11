@@ -16,7 +16,8 @@ module Peasec_monad_basic = struct
       run =
         (fun inp cok eok cerr eerr ->
           p.run inp
-            (fun x inp' -> (f x).run inp' cok eok cerr eerr)
+            (fun x inp' ->
+              (f x).run inp' cok (fun y -> cok y inp') cerr (cerr inp'))
             (fun x -> (f x).run inp cok eok cerr eerr)
             cerr eerr);
     }
