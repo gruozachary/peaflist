@@ -42,6 +42,7 @@ end)
 
 include M
 include A
+open Let_syntax
 
 let exec (p : 'a t) (inp : string) : 'a Option.t =
   p.run inp
@@ -58,6 +59,8 @@ let satisfy (f : char -> bool) : char t =
           cok inp.[0] (String.drop_prefix inp 1)
         else eerr);
   }
+
+let empty = { run = (fun _ _ _ _ eerr -> eerr) }
 
 let first_ok pl pr =
   {
@@ -92,7 +95,16 @@ let eof =
         if String.for_all ~f:Char.is_whitespace inp then eok () else eerr);
   }
 
-open Let_syntax
+let choice = List.fold_right ~f:first_ok ~init:empty
+
+let sep_by_1 p ~sep =
+  let%bind x = p
+  and xs =
+    many
+      (let%map _ = sep and y = p in
+       y)
+  in
+  return (x :: xs)
 
 let char c = satisfy (equal_char c)
 let letter = satisfy Char.is_alpha

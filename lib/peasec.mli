@@ -34,6 +34,12 @@ val atomic : 'a t -> 'a t
 val eof : unit t
 (** A parser that checks that we are at the end of the input *)
 
+val choice : 'a t list -> 'a t
+(** A parser that finds the first ok parser in a list *)
+
+val sep_by_1 : 'a t -> sep:'b t -> 'a list t
+(** Combinator that consumes a list separated by separators *)
+
 val char : Base.char -> Base.char t
 (** A parser that consumes a specific character *)
 
