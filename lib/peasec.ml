@@ -103,7 +103,7 @@ let some (p : 'a t) : 'a list t =
   let%map xs = many p in
   x :: xs
 
-let trye (p : 'a t) =
+let trye (p : 'a t) : 'a t =
   { run = (fun inp cok eok _ eerr -> p.run inp cok eok (fun _ -> eerr) eerr) }
 
 let eof =

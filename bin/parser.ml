@@ -49,10 +49,11 @@ let keywords = Set.of_list (module String) [ "fun"; "let"; "in" ]
 
 let id : AST.id t =
   lexeme
-    (let%bind first = letter in
-     let%bind rest = many (first_ok (first_ok letter digit) (char '_')) in
-     let x = String.of_char_list (first :: rest) in
-     if Set.mem keywords x then fail else return x)
+    (trye
+       (let%bind first = letter in
+        let%bind rest = many (first_ok (first_ok letter digit) (char '_')) in
+        let x = String.of_char_list (first :: rest) in
+        if Set.mem keywords x then fail else return x))
 
 (* TODO: this will result on a horrible disaster if there are too many digits *)
 and int : AST.int t =
