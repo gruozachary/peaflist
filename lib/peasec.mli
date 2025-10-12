@@ -7,6 +7,9 @@ val exec : 'a t -> Base.string -> 'a Base.Option.t
 val fix : ('a t -> 'a t) -> 'a t
 (* Combinator for recursion *)
 
+val fail : 'a t
+(* Unconditionally fails *)
+
 val satisfy : (Base.char -> Base.bool) -> Base.char t
 (** A parser that checks if the next character against a predicate *)
 
@@ -64,6 +67,9 @@ val space : Base.char t
 
 val spaces : unit t
 (** A parser that consumes whitespace characters *)
+
+val spaces_1 : unit t
+(** A parser that consumes at least 1 whitespace character *)
 
 val string : Base.string -> Base.string t
 (** A parser that consumes a specific string *)

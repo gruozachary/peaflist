@@ -60,6 +60,8 @@ let fix (f : 'a t -> 'a t) : 'a t =
   in
   { run = self }
 
+let fail : 'a t = { run = (fun _ _ _ _ eerr -> eerr) }
+
 let satisfy (f : char -> bool) : char t =
   {
     run =
@@ -139,6 +141,11 @@ let letter = satisfy Char.is_alpha
 let digit = satisfy Char.is_digit
 let space = satisfy Char.is_whitespace
 let spaces = ignore_m (many space)
+
+let spaces_1 =
+  let%bind _ = space in
+  let%map _ = spaces in
+  ()
 
 let string s =
   let rec string_check i =

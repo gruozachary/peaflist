@@ -45,11 +45,14 @@ module AST = struct
   and list_elems = expr list
 end
 
+let keywords = Set.of_list (module String) [ "fun"; "let"; "in" ]
+
 let id : AST.id t =
   lexeme
     (let%bind first = letter in
-     let%map rest = many (first_ok (first_ok letter digit) (char '_')) in
-     String.of_char_list (first :: rest))
+     let%bind rest = many (first_ok (first_ok letter digit) (char '_')) in
+     let x = String.of_char_list (first :: rest) in
+     if Set.mem keywords x then fail else return x)
 
 (* TODO: this will result on a horrible disaster if there are too many digits *)
 and int : AST.int t =
@@ -61,16 +64,19 @@ and int : AST.int t =
 let rec expr () = choice [ binding (); lambda (); append () ]
 
 and binding () =
-  let%bind _ = symbol "let" in
+  let%bind _ = string "let" in
+  let%bind _ = spaces_1 in
   let%bind x = id in
   let%bind _ = symbol "=" in
   let%bind e1 = expr () in
-  let%bind _ = symbol "in" in
+  let%bind _ = string "in" in
+  let%bind _ = spaces_1 in
   let%map e2 = expr () in
   AST.Binding (x, e1, e2)
 
 and lambda () =
-  let%bind _ = symbol "fun" in
+  let%bind _ = string "fun" in
+  let%bind _ = spaces_1 in
   let%bind x = id in
   let%bind _ = symbol "->" in
   let%map e = expr () in
