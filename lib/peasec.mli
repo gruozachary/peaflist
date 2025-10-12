@@ -38,7 +38,7 @@ val some : 'a t -> 'a list t
 (** Creates a parser that repeatedly applies a parser until failure, at least
     one result *)
 
-val atomic : 'a t -> 'a t
+val trye : 'a t -> 'a t
 (** Returns a new parser that will not consume the input if there is an error *)
 
 val eof : unit t

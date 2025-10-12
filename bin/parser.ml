@@ -64,8 +64,12 @@ and int : AST.int t =
 let rec expr () = choice [ binding (); lambda (); append () ]
 
 and binding () =
-  let%bind _ = string "let" in
-  let%bind _ = spaces_1 in
+  let%bind _ =
+    trye
+      (let%bind _ = string "let" in
+       let%map _ = spaces_1 in
+       ())
+  in
   let%bind x = id in
   let%bind _ = symbol "=" in
   let%bind e1 = expr () in
@@ -75,8 +79,12 @@ and binding () =
   AST.Binding (x, e1, e2)
 
 and lambda () =
-  let%bind _ = string "fun" in
-  let%bind _ = spaces_1 in
+  let%bind _ =
+    trye
+      (let%bind _ = string "fun" in
+       let%map _ = spaces_1 in
+       ())
+  in
   let%bind x = id in
   let%bind _ = symbol "->" in
   let%map e = expr () in
@@ -85,7 +93,7 @@ and lambda () =
 (* TODO: make this chain_right_1 *)
 and append () =
   chain_left_1 (add ())
-    (let%map _ = atomic (symbol "++") in
+    (let%map _ = symbol "++" in
      fun l r -> AST.BinOp (l, AST.Append, r))
 
 and add () =
