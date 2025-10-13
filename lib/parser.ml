@@ -99,7 +99,14 @@ and append () =
 
 and add () =
   chain_left_1 (mul ())
-    (let%map x = first_ok (symbol "+") (symbol "-") in
+    (let%map x =
+       first_ok
+         (trye
+            (let%bind x = symbol "+" in
+             let%map _ = not_followed_by (symbol "+") in
+             x))
+         (symbol "-")
+     in
      fun l r ->
        match x with
        | "+" -> AST.BinOp (l, AST.Plus, r)

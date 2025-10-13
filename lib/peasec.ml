@@ -115,6 +115,13 @@ let eof =
 
 let choice = List.fold_right ~f:first_ok ~init:empty
 
+let not_followed_by p =
+  {
+    run =
+      (fun inp _ eok _ eerr ->
+        p.run inp (fun _ _ -> eerr) (fun _ -> eerr) (fun _ -> eok ()) (eok ()));
+  }
+
 let sep_by_1 p ~sep =
   let%bind x = p
   and xs =
