@@ -1,5 +1,5 @@
 open! Base
-open! Sqc.Peasec
+open! Peasec
 open! Let_syntax
 
 (* Peaflist v1 grammar *)
@@ -136,6 +136,3 @@ and atom () =
        let%map _ = symbol "]" in
        AST.List es);
     ]
-
-include Sqc.Peasec
-include Sqc.Peasec.Let_syntax
