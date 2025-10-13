@@ -2,31 +2,6 @@ open! Base
 open! Peasec
 open! Let_syntax
 
-(* Peaflist v1 grammar *)
-(*
-  Prog      ::= Expr ;
-
-  Expr      ::= Int
-              | Id
-              | Expr Expr                       function application
-              | "(" Expr ")"                    group
-              | "fun" Id "->" Expr              lamda
-              | "let" Id "=" Expr "in" Expr     binding
-              | "[" ListElems? "]"
-              | Expr BinOp Expr
-              ;
-
-  ListElems ::= Expr ("," Expr)* ;
-
-  BinOp     ::= "+" | "-" | "*" | "/" | "++" ;
-
-  Int       ::= Digit+ ;
-  Digit     ::= "0" | ... | "9" ;
-
-  Id        ::= Letter (Letter | Digit | "_")* ;
-  Letter    ::= "a" | ... "z" | "A" | ... | "Z" ;
-*)
-
 module AST = struct
   type nonrec int = int
   type id = string
@@ -43,9 +18,12 @@ module AST = struct
     | BinOp of expr * bin_op * expr
 
   and list_elems = expr list
+
+  type decl = ValDecl of id * expr
+  type prog = decl list
 end
 
-let keywords = Set.of_list (module String) [ "fun"; "let"; "in" ]
+let keywords = Set.of_list (module String) [ "fun"; "let"; "in"; "vd" ]
 
 let id : AST.id t =
   lexeme
@@ -143,3 +121,20 @@ and atom () =
        let%map _ = symbol "]" in
        AST.List es);
     ]
+
+let val_decl =
+  let%bind _ =
+    let%bind _ = string "vd" in
+    let%map _ = spaces_1 in
+    ()
+  in
+  let%bind x = id in
+  let%bind _ = symbol ":=" in
+  let%map e = expr () in
+  AST.ValDecl (x, e)
+
+let prog =
+  fully
+    (let%bind vd = many val_decl in
+     let%map _ = spaces in
+     vd)
