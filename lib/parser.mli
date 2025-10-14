@@ -1,11 +1,13 @@
 (* Peaflist v1 grammar *)
 (*
-  Prog      ::= ValDecl* ;
+  Prog      ::= (ValDecl | TypeDecl)* ;
 
   ValDecl   ::= "vd" Id ":=" Expr ;
-  TypeDecl  ::= "td" Id ":=" ( "|" Id Type? )+
+  TypeDecl  ::= "td" Id ":=" ( "|" Id Type? )+ ;
 
-  Type      ::= Id | "(" Type ")" | Type ( "*" Type )*
+  Type      ::= ProdType ( "->" ProdType)* ;
+  ProdType  ::= AtomType ( "*" AtomType )* ;
+  AtomType  ::= Id | "(" Type ")" ;
 
   Expr      ::= Int
               | Id
@@ -45,10 +47,8 @@ module AST : sig
     | Tuple of expr list
     | BinOp of expr * bin_op * expr
 
-  type type_ = type_atom list
-  and type_atom = Tid of id | Type of type_
-
-  type decl = ValDecl of id * expr | TypeDecl of id * (id * type_ option) list
+  type ty = TyId of id | TyProd of ty * ty | TyFun of ty * ty
+  type decl = ValDecl of id * expr | TypeDecl of id * (id * ty option) list
   type prog = decl list
 end
 

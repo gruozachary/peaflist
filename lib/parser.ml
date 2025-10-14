@@ -18,10 +18,8 @@ module AST = struct
     | Tuple of expr list
     | BinOp of expr * bin_op * expr
 
-  type type_ = type_atom list
-  and type_atom = Tid of id | Type of type_
-
-  type decl = ValDecl of id * expr | TypeDecl of id * (id * type_ option) list
+  type ty = TyId of id | TyProd of ty * ty | TyFun of ty * ty
+  type decl = ValDecl of id * expr | TypeDecl of id * (id * ty option) list
   type prog = decl list
 end
 
@@ -130,26 +128,26 @@ let val_decl =
   let%map e = expr () in
   AST.ValDecl (x, e)
 
-let rec type_ () : AST.type_ t =
-  let%bind first = type_atom () in
-  let%map rest =
-    many
-      (let%bind _ = symbol "*" in
-       let%map ta = type_atom () in
-       ta)
-  in
-  first :: rest
+let rec ty () = ty_fun ()
 
-and type_atom () : AST.type_atom t =
-  choice
-    [
-      (let%map x = id in
-       AST.Tid x);
-      (let%bind _ = symbol "(" in
-       let%bind t = type_ () in
-       let%map _ = symbol ")" in
-       AST.Type t);
-    ]
+and ty_fun () =
+  chain_left_1 (ty_prod ())
+    (let%map _ = symbol "->" in
+     fun lt rt -> AST.TyFun (lt, rt))
+
+and ty_prod () =
+  chain_left_1 (ty_atom ())
+    (let%map _ = symbol "*" in
+     fun lt rt -> AST.TyProd (lt, rt))
+
+and ty_atom () =
+  first_ok
+    (let%map x = id in
+     AST.TyId x)
+    (let%bind _ = symbol "(" in
+     let%bind t = ty () in
+     let%map _ = symbol ")" in
+     t)
 
 let type_decl =
   let%bind _ = keyword "td" in
@@ -161,7 +159,7 @@ let type_decl =
        let%bind y = id in
        let%map t =
          option ~def:None
-           (let%map t = type_ () in
+           (let%map t = ty () in
             Some t)
        in
        (y, t))
