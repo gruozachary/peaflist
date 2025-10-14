@@ -149,6 +149,18 @@ let chain_left_1 p op =
   let%bind x = p in
   rest x
 
+let chain_right_1 p op =
+  let rec rest x =
+    first_ok
+      (let%bind f = op in
+       let%bind y = p in
+       let%map r = rest y in
+       f x r)
+      (return x)
+  in
+  let%bind x = p in
+  rest x
+
 let char c = satisfy (equal_char c)
 let letter = satisfy Char.is_alpha
 let digit = satisfy Char.is_digit

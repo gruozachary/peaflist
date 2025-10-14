@@ -64,9 +64,8 @@ and lambda () =
   let%map e = expr () in
   AST.Lambda (x, e)
 
-(* TODO: make this chain_right_1 *)
 and append () =
-  chain_left_1 (add ())
+  chain_right_1 (add ())
     (let%map _ = symbol "++" in
      fun l r -> AST.BinOp (l, AST.Append, r))
 
@@ -131,12 +130,12 @@ let val_decl =
 let rec ty () = ty_fun ()
 
 and ty_fun () =
-  chain_left_1 (ty_prod ())
+  chain_right_1 (ty_prod ())
     (let%map _ = symbol "->" in
      fun lt rt -> AST.TyFun (lt, rt))
 
 and ty_prod () =
-  chain_left_1 (ty_atom ())
+  chain_right_1 (ty_atom ())
     (let%map _ = symbol "*" in
      fun lt rt -> AST.TyProd (lt, rt))
 

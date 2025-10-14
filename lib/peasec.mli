@@ -58,6 +58,9 @@ val sep_by_1 : 'a t -> sep:'b t -> 'a list t
 val chain_left_1 : 'a t -> ('a -> 'a -> 'a) t -> 'a t
 (** Consumes values in a left-associative way *)
 
+val chain_right_1 : 'a t -> ('a -> 'a -> 'a) t -> 'a t
+(** Consumes values in a right-associative way *)
+
 val char : Base.char -> Base.char t
 (** A parser that consumes a specific character *)
 
