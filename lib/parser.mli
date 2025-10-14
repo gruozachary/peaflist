@@ -41,10 +41,9 @@ module AST : sig
     | Group of expr
     | Lambda of id * expr
     | Binding of id * expr * expr
-    | List of list_elems
+    | List of expr list
+    | Tuple of expr list
     | BinOp of expr * bin_op * expr
-
-  and list_elems = expr list
 
   type type_ = type_atom list
   and type_atom = Tid of id | Type of type_
