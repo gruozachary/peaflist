@@ -34,6 +34,11 @@ let id : AST.id t =
         let x = String.of_char_list (first :: rest) in
         if Set.mem keywords x then fail else return x))
 
+let keyword (s : string) : unit t =
+  let%bind _ = string s in
+  let%map _ = spaces_1 in
+  ()
+
 (* TODO: this will result on a horrible disaster if there are too many digits *)
 and int : AST.int t =
   lexeme
@@ -44,12 +49,7 @@ and int : AST.int t =
 let rec expr () = choice [ binding (); lambda (); append () ]
 
 and binding () =
-  let%bind _ =
-    trye
-      (let%bind _ = string "let" in
-       let%map _ = spaces_1 in
-       ())
-  in
+  let%bind _ = trye (keyword "let") in
   let%bind x = id in
   let%bind _ = symbol "=" in
   let%bind e1 = expr () in
@@ -59,12 +59,7 @@ and binding () =
   AST.Binding (x, e1, e2)
 
 and lambda () =
-  let%bind _ =
-    trye
-      (let%bind _ = string "fun" in
-       let%map _ = spaces_1 in
-       ())
-  in
+  let%bind _ = trye (keyword "fun") in
   let%bind x = id in
   let%bind _ = symbol "->" in
   let%map e = expr () in
@@ -124,11 +119,7 @@ and atom () =
     ]
 
 let val_decl =
-  let%bind _ =
-    let%bind _ = string "vd" in
-    let%map _ = spaces_1 in
-    ()
-  in
+  let%bind _ = keyword "vd" in
   let%bind x = id in
   let%bind _ = symbol ":=" in
   let%map e = expr () in
@@ -145,11 +136,7 @@ let type_ =
   x :: rest
 
 let type_decl =
-  let%bind _ =
-    let%bind _ = string "td" in
-    let%map _ = spaces_1 in
-    ()
-  in
+  let%bind _ = keyword "td" in
   let%bind x = id in
   let%bind _ = symbol ":=" in
   let%map ts =
