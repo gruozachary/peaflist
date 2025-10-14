@@ -19,11 +19,12 @@ module AST = struct
 
   and list_elems = expr list
 
-  type decl = ValDecl of id * expr
+  type type_ = id list
+  type decl = ValDecl of id * expr | TypeDecl of id * (id * type_ option) list
   type prog = decl list
 end
 
-let keywords = Set.of_list (module String) [ "fun"; "let"; "in"; "vd" ]
+let keywords = Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td" ]
 
 let id : AST.id t =
   lexeme
@@ -133,8 +134,39 @@ let val_decl =
   let%map e = expr () in
   AST.ValDecl (x, e)
 
+let type_ =
+  let%bind x = id in
+  let%map rest =
+    many
+      (let%bind _ = symbol "*" in
+       let%map y = id in
+       y)
+  in
+  x :: rest
+
+let type_decl =
+  let%bind _ =
+    let%bind _ = string "td" in
+    let%map _ = spaces_1 in
+    ()
+  in
+  let%bind x = id in
+  let%bind _ = symbol ":=" in
+  let%map ts =
+    some
+      (let%bind _ = symbol "|" in
+       let%bind y = id in
+       let%map t =
+         option ~def:None
+           (let%map t = type_ in
+            Some t)
+       in
+       (y, t))
+  in
+  AST.TypeDecl (x, ts)
+
 let prog =
   fully
-    (let%bind vd = many val_decl in
+    (let%bind vd = many (first_ok val_decl type_decl) in
      let%map _ = spaces in
      vd)

@@ -44,6 +44,9 @@ val trye : 'a t -> 'a t
 val eof : unit t
 (** A parser that checks that we are at the end of the input *)
 
+val option : 'a t -> def:'a -> 'a t
+(** A parser that attempts to run or returns a default value *)
+
 val choice : 'a t list -> 'a t
 (** A parser that finds the first ok parser in a list *)
 

@@ -2,7 +2,10 @@
 (*
   Prog      ::= ValDecl* ;
 
-  ValDecl    ::= "vd" Id ":=" Expr ;
+  ValDecl   ::= "vd" Id ":=" Expr ;
+  TypeDecl  ::= "td" Id ":=" ( "|" Id Type? )+
+
+  Type      ::= Id ("*" Id)*
 
   Expr      ::= Int
               | Id
@@ -42,7 +45,8 @@ module AST : sig
 
   and list_elems = expr list
 
-  type decl = ValDecl of id * expr
+  type type_ = id list
+  type decl = ValDecl of id * expr | TypeDecl of id * (id * type_ option) list
   type prog = decl list
 end
 

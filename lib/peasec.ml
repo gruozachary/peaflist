@@ -113,6 +113,12 @@ let eof =
         if String.for_all ~f:Char.is_whitespace inp then eok () else eerr);
   }
 
+let option (p : 'a t) ~(def : 'a) : 'a t =
+  {
+    run =
+      (fun inp cok eok _ _ -> p.run inp cok eok (fun _ -> eok def) (eok def));
+  }
+
 let choice = List.fold_right ~f:first_ok ~init:empty
 
 let not_followed_by p =
