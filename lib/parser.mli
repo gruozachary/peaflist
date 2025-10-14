@@ -5,7 +5,7 @@
   ValDecl   ::= "vd" Id ":=" Expr ;
   TypeDecl  ::= "td" Id ":=" ( "|" Id Type? )+
 
-  Type      ::= Id ("*" Id)*
+  Type      ::= Id | "(" Type ")" | Type ( "*" Type )*
 
   Expr      ::= Int
               | Id
@@ -13,6 +13,7 @@
               | "(" Expr ")"                    group
               | "fun" Id "->" Expr              lamda
               | "let" Id "=" Expr "in" Expr     binding
+              | "{" ( Expr ( "," Expr)* )? "}"  tuple
               | "[" ListElems? "]"
               | Expr BinOp Expr
               ;
@@ -45,7 +46,9 @@ module AST : sig
 
   and list_elems = expr list
 
-  type type_ = id list
+  type type_ = type_atom list
+  and type_atom = Tid of id | Type of type_
+
   type decl = ValDecl of id * expr | TypeDecl of id * (id * type_ option) list
   type prog = decl list
 end

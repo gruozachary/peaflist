@@ -19,7 +19,9 @@ module AST = struct
 
   and list_elems = expr list
 
-  type type_ = id list
+  type type_ = type_atom list
+  and type_atom = Tid of id | Type of type_
+
   type decl = ValDecl of id * expr | TypeDecl of id * (id * type_ option) list
   type prog = decl list
 end
@@ -125,15 +127,26 @@ let val_decl =
   let%map e = expr () in
   AST.ValDecl (x, e)
 
-let type_ =
-  let%bind x = id in
+let rec type_ () : AST.type_ t =
+  let%bind first = type_atom () in
   let%map rest =
     many
       (let%bind _ = symbol "*" in
-       let%map y = id in
-       y)
+       let%map ta = type_atom () in
+       ta)
   in
-  x :: rest
+  first :: rest
+
+and type_atom () : AST.type_atom t =
+  choice
+    [
+      (let%map x = id in
+       AST.Tid x);
+      (let%bind _ = symbol "(" in
+       let%bind t = type_ () in
+       let%map _ = symbol ")" in
+       AST.Type t);
+    ]
 
 let type_decl =
   let%bind _ = keyword "td" in
@@ -145,7 +158,7 @@ let type_decl =
        let%bind y = id in
        let%map t =
          option ~def:None
-           (let%map t = type_ in
+           (let%map t = type_ () in
             Some t)
        in
        (y, t))
