@@ -2,30 +2,9 @@ open! Base
 open! Peasec
 open! Let_syntax
 
-module AST = struct
-  type nonrec int = int
-  type id = string
-  type bin_op = Plus | Sub | Mul | Div | Append
-
-  type expr =
-    | Int of int
-    | Id of id
-    | Apply of expr * expr
-    | Group of expr
-    | Lambda of id * expr
-    | Binding of id * expr * expr
-    | List of expr list
-    | Tuple of expr list
-    | BinOp of expr * bin_op * expr
-
-  type ty = TyId of id | TyProd of ty * ty | TyFun of ty * ty
-  type decl = ValDecl of id * expr | TypeDecl of id * (id * ty option) list
-  type prog = decl list
-end
-
 let keywords = Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td" ]
 
-let id : AST.id t =
+let id : Ast.id t =
   lexeme
     (trye
        (let%bind first = letter in
@@ -39,7 +18,7 @@ let keyword (s : string) : unit t =
   ()
 
 (* TODO: this will result on a horrible disaster if there are too many digits *)
-and int : AST.int t =
+and int : Ast.int t =
   lexeme
     (let%bind first = digit in
      let%map rest = many digit in
@@ -55,19 +34,19 @@ and binding () =
   let%bind _ = string "in" in
   let%bind _ = spaces_1 in
   let%map e2 = expr () in
-  AST.Binding (x, e1, e2)
+  Ast.Binding (x, e1, e2)
 
 and lambda () =
   let%bind _ = trye (keyword "fun") in
   let%bind x = id in
   let%bind _ = symbol "->" in
   let%map e = expr () in
-  AST.Lambda (x, e)
+  Ast.Lambda (x, e)
 
 and append () =
   chain_right_1 (add ())
     (let%map _ = symbol "++" in
-     fun l r -> AST.BinOp (l, AST.Append, r))
+     fun l r -> Ast.BinOp (l, Ast.Append, r))
 
 and add () =
   chain_left_1 (mul ())
@@ -81,8 +60,8 @@ and add () =
      in
      fun l r ->
        match x with
-       | "+" -> AST.BinOp (l, AST.Plus, r)
-       | "-" -> AST.BinOp (l, AST.Sub, r)
+       | "+" -> Ast.BinOp (l, Ast.Plus, r)
+       | "-" -> Ast.BinOp (l, Ast.Sub, r)
        | _ -> assert false)
 
 and mul () =
@@ -90,34 +69,34 @@ and mul () =
     (let%map x = first_ok (symbol "*") (symbol "/") in
      fun l r ->
        match x with
-       | "*" -> AST.BinOp (l, AST.Mul, r)
-       | "/" -> AST.BinOp (l, AST.Div, r)
+       | "*" -> Ast.BinOp (l, Ast.Mul, r)
+       | "/" -> Ast.BinOp (l, Ast.Div, r)
        | _ -> assert false)
 
 and apply () =
   let%bind x = atom () in
   let%map xs = many (atom ()) in
-  List.fold ~init:x ~f:(fun f x -> AST.Apply (f, x)) xs
+  List.fold ~init:x ~f:(fun f x -> Ast.Apply (f, x)) xs
 
 and atom () =
   choice
     [
       (let%map x = int in
-       AST.Int x);
+       Ast.Int x);
       (let%map x = id in
-       AST.Id x);
+       Ast.Id x);
       (let%bind _ = symbol "(" in
        let%bind e = expr () in
        let%map _ = symbol ")" in
-       AST.Group e);
+       Ast.Group e);
       (let%bind _ = symbol "[" in
        let%bind es = sep_by_1 ~sep:(symbol ",") (expr ()) in
        let%map _ = symbol "]" in
-       AST.List es);
+       Ast.List es);
       (let%bind _ = symbol "{" in
        let%bind es = sep_by_1 ~sep:(symbol ",") (expr ()) in
        let%map _ = symbol "}" in
-       AST.Tuple es);
+       Ast.Tuple es);
     ]
 
 let val_decl =
@@ -125,24 +104,24 @@ let val_decl =
   let%bind x = id in
   let%bind _ = symbol ":=" in
   let%map e = expr () in
-  AST.ValDecl (x, e)
+  Ast.ValDecl (x, e)
 
 let rec ty () = ty_fun ()
 
 and ty_fun () =
   chain_right_1 (ty_prod ())
     (let%map _ = symbol "->" in
-     fun lt rt -> AST.TyFun (lt, rt))
+     fun lt rt -> Ast.TyFun (lt, rt))
 
 and ty_prod () =
   chain_right_1 (ty_atom ())
     (let%map _ = symbol "*" in
-     fun lt rt -> AST.TyProd (lt, rt))
+     fun lt rt -> Ast.TyProd (lt, rt))
 
 and ty_atom () =
   first_ok
     (let%map x = id in
-     AST.TyId x)
+     Ast.TyId x)
     (let%bind _ = symbol "(" in
      let%bind t = ty () in
      let%map _ = symbol ")" in
@@ -163,7 +142,7 @@ let type_decl =
        in
        (y, t))
   in
-  AST.TypeDecl (x, ts)
+  Ast.TypeDecl (x, ts)
 
 let prog =
   fully

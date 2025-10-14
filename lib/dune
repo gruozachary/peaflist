@@ -1,4 +1,5 @@
 (library
  (name sqc)
  (libraries base)
- (preprocess (pps ppx_let)))
+ (preprocess (pps ppx_let))
+ (modules_without_implementation ast))
