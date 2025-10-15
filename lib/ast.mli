@@ -15,7 +15,7 @@ type expr =
   | Tuple of expr list
   | BinOp of expr * bin_op * expr
 
-type ty = TyId of id | TyProd of ty * ty | TyFun of ty * ty
+type ty = TyId of id | TyApp of ty * ty | TyProd of ty * ty | TyFun of ty * ty
 
 type decl =
   | ValDecl of id * expr

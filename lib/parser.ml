@@ -122,9 +122,14 @@ and ty_fun () =
      fun lt rt -> Ast.TyFun (lt, rt))
 
 and ty_prod () =
-  chain_right_1 (ty_atom ())
+  chain_right_1 (ty_app ())
     (let%map _ = symbol "*" in
      fun lt rt -> Ast.TyProd (lt, rt))
+
+and ty_app () =
+  let%bind x = ty_atom () in
+  let%map xs = many (ty_atom ()) in
+  List.fold ~init:x ~f:(fun lt rt -> Ast.TyApp (lt, rt)) xs
 
 and ty_atom () =
   first_ok

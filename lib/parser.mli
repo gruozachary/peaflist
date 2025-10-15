@@ -6,7 +6,8 @@
   TypeDecl  ::= "td" "(" ( TVar ( "," TVar )* )? ")" Id ":=" ( "|" Id Type? )+ ;
 
   Type      ::= ProdType ( "->" ProdType)* ;
-  ProdType  ::= AtomType ( "*" AtomType )* ;
+  ProdType  ::= AppType ( "*" AppType )* ;
+  AppType   ::= AtomType AtomType
   AtomType  ::= TId | "(" Type ")" ;
 
   Expr      ::= Int
