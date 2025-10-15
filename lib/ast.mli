@@ -1,5 +1,7 @@
 type nonrec int = int
 type id = string
+type ty_id = string
+type ty_var = string
 type bin_op = Plus | Sub | Mul | Div | Append
 
 type expr =

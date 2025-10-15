@@ -3,11 +3,11 @@
   Prog      ::= (ValDecl | TypeDecl)* ;
 
   ValDecl   ::= "vd" Id ":=" Expr ;
-  TypeDecl  ::= "td" Id ":=" ( "|" Id Type? )+ ;
+  TypeDecl  ::= "td" "(" ( TVar ( "," TVar )* )? ")" Id ":=" ( "|" Id Type? )+ ;
 
   Type      ::= ProdType ( "->" ProdType)* ;
   ProdType  ::= AtomType ( "*" AtomType )* ;
-  AtomType  ::= Id | "(" Type ")" ;
+  AtomType  ::= TId | "(" Type ")" ;
 
   Expr      ::= Int
               | Id
@@ -28,6 +28,8 @@
   Digit     ::= "0" | ... | "9" ;
 
   Id        ::= Letter (Letter | Digit | "_")* ;
+  TVar      ::= "'" Id
+  TId       ::= Id | TVar
   Letter    ::= "a" | ... "z" | "A" | ... | "Z" ;
 *)
 

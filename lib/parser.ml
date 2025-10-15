@@ -12,6 +12,14 @@ let id : Ast.id t =
         let x = String.of_char_list (first :: rest) in
         if Set.mem keywords x then fail else return x))
 
+let ty_var : Ast.ty_var t =
+  lexeme
+    (let%bind _ = char '\'' in
+     let%map xs = many (first_ok (first_ok letter digit) (char '_')) in
+     String.of_char_list ('\'' :: xs))
+
+let ty_id : Ast.ty_id t = first_ok ty_var id
+
 let keyword (s : string) : unit t =
   let%bind _ = string s in
   let%map _ = spaces_1 in
@@ -120,7 +128,7 @@ and ty_prod () =
 
 and ty_atom () =
   first_ok
-    (let%map x = id in
+    (let%map x = ty_id in
      Ast.TyId x)
     (let%bind _ = symbol "(" in
      let%bind t = ty () in
