@@ -141,6 +141,8 @@ let sep_by_1 p ~sep =
   in
   return (x :: xs)
 
+let sep_by p ~sep = first_ok (sep_by_1 p ~sep) (return [])
+
 let between ~l p ~r =
   let%bind _ = l in
   let%bind x = p in

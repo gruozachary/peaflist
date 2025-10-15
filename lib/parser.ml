@@ -137,6 +137,9 @@ and ty_atom () =
 
 let type_decl =
   let%bind _ = keyword "td" in
+  let%bind tvs =
+    between ~l:(symbol "(") ~r:(symbol ")") (sep_by ~sep:(symbol ",") ty_var)
+  in
   let%bind x = id in
   let%bind _ = symbol ":=" in
   let%map ts =
@@ -150,7 +153,7 @@ let type_decl =
        in
        (y, t))
   in
-  Ast.TypeDecl (x, ts)
+  Ast.TypeDecl (x, tvs, ts)
 
 let prog =
   fully

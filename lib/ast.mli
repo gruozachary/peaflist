@@ -16,5 +16,9 @@ type expr =
   | BinOp of expr * bin_op * expr
 
 type ty = TyId of id | TyProd of ty * ty | TyFun of ty * ty
-type decl = ValDecl of id * expr | TypeDecl of id * (id * ty option) list
+
+type decl =
+  | ValDecl of id * expr
+  | TypeDecl of id * ty_var list * (id * ty option) list
+
 type prog = decl list

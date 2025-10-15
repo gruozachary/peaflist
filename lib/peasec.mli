@@ -56,6 +56,9 @@ val choice : 'a t list -> 'a t
 val not_followed_by : 'a t -> unit t
 
 val sep_by_1 : 'a t -> sep:'b t -> 'a list t
+(** Combinator that consumes a list separated by separators (at least one)*)
+
+val sep_by : 'a t -> sep:'b t -> 'a list t
 (** Combinator that consumes a list separated by separators *)
 
 val between : l:'b t -> 'a t -> r:'c t -> 'a t
