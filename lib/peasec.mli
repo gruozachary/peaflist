@@ -47,6 +47,9 @@ val eof : unit t
 val option : 'a t -> def:'a -> 'a t
 (** A parser that attempts to run or returns a default value *)
 
+val defer : (unit -> 'a t) -> 'a t
+(** Stops eager evaluation when building the parser *)
+
 val choice : 'a t list -> 'a t
 (** A parser that finds the first ok parser in a list *)
 
@@ -54,6 +57,9 @@ val not_followed_by : 'a t -> unit t
 
 val sep_by_1 : 'a t -> sep:'b t -> 'a list t
 (** Combinator that consumes a list separated by separators *)
+
+val between : l:'b t -> 'a t -> r:'c t -> 'a t
+(** Parser that gets the result of a parser between two others *)
 
 val chain_left_1 : 'a t -> ('a -> 'a -> 'a) t -> 'a t
 (** Consumes values in a left-associative way *)

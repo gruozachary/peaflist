@@ -119,6 +119,9 @@ let option (p : 'a t) ~(def : 'a) : 'a t =
       (fun inp cok eok _ _ -> p.run inp cok eok (fun _ -> eok def) (eok def));
   }
 
+let defer (f : unit -> 'a t) : 'a t =
+  { run = (fun inp cok eok cerr eerr -> (f ()).run inp cok eok cerr eerr) }
+
 let choice = List.fold_right ~f:first_ok ~init:empty
 
 let not_followed_by p =
@@ -137,6 +140,12 @@ let sep_by_1 p ~sep =
        y)
   in
   return (x :: xs)
+
+let between ~l p ~r =
+  let%bind _ = l in
+  let%bind x = p in
+  let%map _ = r in
+  x
 
 let chain_left_1 p op =
   let rec rest x =

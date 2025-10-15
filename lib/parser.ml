@@ -93,17 +93,17 @@ and atom () =
        Ast.Int x);
       (let%map x = id in
        Ast.Id x);
-      (let%bind _ = symbol "(" in
-       let%bind e = expr () in
-       let%map _ = symbol ")" in
+      (let%map e = between ~l:(symbol "(") ~r:(symbol ")") (defer expr) in
        Ast.Group e);
-      (let%bind _ = symbol "[" in
-       let%bind es = sep_by_1 ~sep:(symbol ",") (expr ()) in
-       let%map _ = symbol "]" in
+      (let%map es =
+         between ~l:(symbol "[") ~r:(symbol "]")
+           (sep_by_1 ~sep:(symbol ",") (defer expr))
+       in
        Ast.List es);
-      (let%bind _ = symbol "{" in
-       let%bind es = sep_by_1 ~sep:(symbol ",") (expr ()) in
-       let%map _ = symbol "}" in
+      (let%map es =
+         between ~l:(symbol "{") ~r:(symbol "}")
+           (sep_by_1 ~sep:(symbol ",") (defer expr))
+       in
        Ast.Tuple es);
     ]
 
