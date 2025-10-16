@@ -2,7 +2,8 @@ open! Base
 open! Peasec
 open! Let_syntax
 
-let keywords = Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td" ]
+let keywords =
+  Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td"; "of" ]
 
 let id : Ast.id t =
   lexeme
@@ -153,7 +154,8 @@ let type_decl =
        let%bind y = id in
        let%map t =
          option ~def:None
-           (let%map t = ty () in
+           (let%bind _ = keyword "of" in
+            let%map t = ty () in
             Some t)
        in
        (y, t))

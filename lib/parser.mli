@@ -3,7 +3,7 @@
   Prog      ::= (ValDecl | TypeDecl)* ;
 
   ValDecl   ::= "vd" Id ":=" Expr ;
-  TypeDecl  ::= "td" "(" ( TVar ( "," TVar )* )? ")" Id ":=" ( "|" Id Type? )+ ;
+  TypeDecl  ::= "td" "(" ( TVar ( "," TVar )* )? ")" Id ":=" ( "|" Id ("of" Type)? )+ ;
 
   Type      ::= ProdType ( "->" ProdType)* ;
   ProdType  ::= AppType ( "*" AppType )* ;
