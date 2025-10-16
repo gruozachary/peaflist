@@ -41,6 +41,9 @@ val some : 'a t -> 'a list t
 val trye : 'a t -> 'a t
 (** Returns a new parser that will not consume the input if there is an error *)
 
+val cut : 'a t -> 'a t
+(** Returns a new parser that will stop backtracking *)
+
 val eof : unit t
 (** A parser that checks that we are at the end of the input *)
 

@@ -106,6 +106,9 @@ let some (p : 'a t) : 'a list t =
 let trye (p : 'a t) : 'a t =
   { run = (fun inp cok eok _ eerr -> p.run inp cok eok (fun _ -> eerr) eerr) }
 
+let cut (p : 'a t) : 'a t =
+  { run = (fun inp cok eok cerr _ -> p.run inp cok eok cerr (cerr inp)) }
+
 let eof =
   {
     run =
