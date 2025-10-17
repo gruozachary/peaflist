@@ -69,7 +69,14 @@ end)
 
 include M
 include A
+open Let_syntax
 
+(* classic applicative *)
+
+let ( >*> ) lp rp = ignore_m lp *> rp
+let ( <*< ) lp rp = lp <* ignore_m rp
+
+(* alternative *)
 let empty = { unparser = (fun _ _ _ _ eerr -> eerr ()) }
 
 let ( <|> ) lp rp =
@@ -82,9 +89,68 @@ let ( <|> ) lp rp =
 
 let choice = List.fold ~init:empty ~f:( <|> )
 
-(* Combinators which are more string-related *)
+let many_acc (p : 'a t) (acc : 'a -> 'a list -> 'a list) : 'a list t =
+  {
+    unparser =
+      (fun inp cok eok cerr eerr ->
+        let rec walk xs x inp' () =
+          p.unparser inp'
+            (fun y -> walk (acc x xs) y)
+            (fun _ -> eerr)
+            cerr
+            (cok (acc x xs) inp')
+        in
+        p.unparser inp (walk []) (fun _ -> eerr) cerr (eok []));
+  }
+
+let many (p : 'a t) : 'a list t = many_acc p List.cons >>| List.rev
+let some (p : 'a t) : 'a list t = p >>| List.cons <*> many p
+
+let attempt (p : 'a t) : 'a t =
+  {
+    unparser =
+      (fun inp cok eok _ eerr -> p.unparser inp cok eok (fun _ -> eerr) eerr);
+  }
+
+let fail : 'a t = { unparser = (fun _ _ _ _ eerr -> eerr ()) }
+
+(*
+combinators which are more string-related
+*)
+
+(* character stuff *)
 
 let char c = satisfy (equal_char c)
 let letter = satisfy Char.is_alpha
 let digit = satisfy Char.is_digit
-let ws = satisfy Char.is_whitespace
+
+(* whitespace stuff *)
+
+let space = satisfy Char.is_whitespace
+let spaces = ignore_m (many space)
+let spaces_1 = space >*> spaces
+
+(* string stuff *)
+
+let string s =
+  let rec string_check i =
+    if i < String.length s then
+      let%bind _ = char s.[i] in
+      string_check (i + 1)
+    else return s
+  in
+  string_check 0
+
+let lexeme p = p <*< spaces
+let symbol s = lexeme (string s)
+
+(* eof stuff *)
+
+let eof =
+  {
+    unparser =
+      (fun inp _ eok _ eerr ->
+        if String.for_all ~f:Char.is_whitespace inp then eok () () else eerr ());
+  }
+
+let fully p = spaces >*> p <*< eof
