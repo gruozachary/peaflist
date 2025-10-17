@@ -16,25 +16,15 @@ let id : Ast.id t =
         if Set.mem keywords x then fail else return x))
 
 let ty_var : Ast.ty_var t =
-  lexeme
-    (let%bind _ = char '\'' in
-     let%map xs = many id_char in
-     String.of_char_list ('\'' :: xs))
+  lexeme (char '\'' >>| List.cons <*> many id_char >>| String.of_char_list)
 
 let ty_id : Ast.ty_id t = ty_var <|> id
 
-let keyword (s : string) : unit t =
-  lexeme
-    (let%bind _ = string s in
-     let%map _ = not_followed_by id_char in
-     ())
+let keyword (s : string) : unit t = lexeme (string s >*> not_followed_by id_char)
 
 (* TODO: this will result on a horrible disaster if there are too many digits *)
 and int : Ast.int t =
-  lexeme
-    (let%bind first = digit in
-     let%map rest = many digit in
-     Int.of_string (String.of_char_list (first :: rest)))
+  lexeme (some digit >>| String.of_char_list >>| Int.of_string)
 
 let rec expr () = choice [ binding (); lambda (); append () ]
 
@@ -64,11 +54,8 @@ and add () =
   chain_left_1 (mul ())
     (let%map x =
        attempt
-         ((let%bind x = char '+' in
-           let%bind _ = not_followed_by (char '+') in
-           let%map _ = spaces in
-           String.of_char x)
-         <|> symbol "-")
+         (char '+' <*< not_followed_by (char '+') <*< spaces >>| String.of_char)
+       <|> symbol "-"
      in
      fun l r ->
        match x with
@@ -138,11 +125,7 @@ and ty_app () =
 and ty_atom () =
   (let%map x = ty_id in
    Ast.TyId x)
-  <|>
-  let%bind _ = symbol "(" in
-  let%bind t = ty () in
-  let%map _ = symbol ")" in
-  t
+  <|> between ~l:(symbol "(") ~r:(symbol ")") (ty ())
 
 let type_decl =
   let%bind _ = keyword "td" in
@@ -156,10 +139,7 @@ let type_decl =
       (let%bind _ = symbol "|" in
        let%bind y = id in
        let%map t =
-         option ~def:None
-           (let%bind _ = keyword "of" in
-            let%map t = ty () in
-            Some t)
+         option ~def:None (keyword "of" >*> ty () >>| fun t -> Some t)
        in
        (y, t))
   in
