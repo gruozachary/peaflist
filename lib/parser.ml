@@ -1,5 +1,5 @@
 open! Base
-open! Peasec2
+open Peasec
 open Let_syntax
 
 let keywords =

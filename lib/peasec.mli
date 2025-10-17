@@ -4,9 +4,6 @@ type 'a t
 val exec : 'a t -> Base.string -> 'a Base.Option.t
 (** A function that executes a parser with a given string*)
 
-val fix : ('a t -> 'a t) -> 'a t
-(* Combinator for recursion *)
-
 val fail : 'a t
 (* Unconditionally fails *)
 
@@ -28,7 +25,7 @@ val all : 'a t list -> 'a list t
 val all_unit : unit t list -> unit t
 (** Discards the result of a list of parsers *)
 
-val first_ok : 'a t -> 'a t -> 'a t
+val ( <|> ) : 'a t -> 'a t -> 'a t
 (** Gets the first non-failing parser *)
 
 val many : 'a t -> 'a list t
@@ -38,11 +35,8 @@ val some : 'a t -> 'a list t
 (** Creates a parser that repeatedly applies a parser until failure, at least
     one result *)
 
-val trye : 'a t -> 'a t
+val attempt : 'a t -> 'a t
 (** Returns a new parser that will not consume the input if there is an error *)
-
-val cut : 'a t -> 'a t
-(** Returns a new parser that will stop backtracking *)
 
 val eof : unit t
 (** A parser that checks that we are at the end of the input *)
@@ -57,6 +51,7 @@ val choice : 'a t list -> 'a t
 (** A parser that finds the first ok parser in a list *)
 
 val not_followed_by : 'a t -> unit t
+(** Negative lookahead *)
 
 val sep_by_1 : 'a t -> sep:'b t -> 'a list t
 (** Combinator that consumes a list separated by separators (at least one)*)

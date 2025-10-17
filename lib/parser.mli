@@ -34,5 +34,5 @@
   Letter    ::= "a" | ... "z" | "A" | ... | "Z" ;
 *)
 
-val prog : Ast.decl list Peasec2.t
+val prog : Ast.decl list Peasec.t
 (* A peasec parser that parses a Peaflist program  *)
