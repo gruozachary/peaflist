@@ -28,6 +28,27 @@ val all_unit : unit t list -> unit t
 val ( <|> ) : 'a t -> 'a t -> 'a t
 (** Gets the first non-failing parser *)
 
+val ( >>| ) : 'a t -> ('a -> 'b) -> 'b t
+(** Infix map *)
+
+val ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t
+(** Infix bind*)
+
+val ( <*> ) : ('a -> 'b) t -> 'a t -> 'b t
+(** Infix ap *)
+
+val ( *> ) : unit t -> 'a t -> 'a t
+(** Explicit ignore left *)
+
+val ( <* ) : 'a t -> unit t -> 'a t
+(** Explicit ignore right *)
+
+val ( >*> ) : 'a t -> 'b t -> 'b t
+(** Implicit ignore left *)
+
+val ( <*< ) : 'a t -> 'b t -> 'a t
+(** Implicit ignore right *)
+
 val many : 'a t -> 'a list t
 (** Creates a parser that repeatedly applies a parser until failure *)
 
