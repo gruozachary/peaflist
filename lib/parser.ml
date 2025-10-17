@@ -5,26 +5,29 @@ open! Let_syntax
 let keywords =
   Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td"; "of" ]
 
+let id_char = first_ok (first_ok letter digit) (char '_')
+
 let id : Ast.id t =
   lexeme
     (trye
        (let%bind first = letter in
-        let%bind rest = many (first_ok (first_ok letter digit) (char '_')) in
+        let%bind rest = many id_char in
         let x = String.of_char_list (first :: rest) in
         if Set.mem keywords x then fail else return x))
 
 let ty_var : Ast.ty_var t =
   lexeme
     (let%bind _ = char '\'' in
-     let%map xs = many (first_ok (first_ok letter digit) (char '_')) in
+     let%map xs = many id_char in
      String.of_char_list ('\'' :: xs))
 
 let ty_id : Ast.ty_id t = first_ok ty_var id
 
 let keyword (s : string) : unit t =
-  let%bind _ = string s in
-  let%map _ = spaces_1 in
-  ()
+  lexeme
+    (let%bind _ = string s in
+     let%map _ = not_followed_by id_char in
+     ())
 
 (* TODO: this will result on a horrible disaster if there are too many digits *)
 and int : Ast.int t =
@@ -40,7 +43,7 @@ and binding () =
   let%bind x = id in
   let%bind _ = symbol "=" in
   let%bind e1 = expr () in
-  let%bind _ = string "in" in
+  let%bind _ = keyword "in" in
   let%bind _ = spaces_1 in
   let%map e2 = expr () in
   Ast.Binding (x, e1, e2)
@@ -62,9 +65,10 @@ and add () =
     (let%map x =
        first_ok
          (trye
-            (let%bind x = symbol "+" in
-             let%map _ = not_followed_by (symbol "+") in
-             x))
+            (let%bind x = char '+' in
+             let%bind _ = not_followed_by (char '+') in
+             let%map _ = spaces in
+             String.of_char x))
          (symbol "-")
      in
      fun l r ->
