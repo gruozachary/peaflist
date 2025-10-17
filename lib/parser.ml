@@ -125,7 +125,7 @@ and ty_app () =
 and ty_atom () =
   (let%map x = ty_id in
    Ast.TyId x)
-  <|> between ~l:(symbol "(") ~r:(symbol ")") (ty ())
+  <|> between ~l:(symbol "(") (defer ty) ~r:(symbol ")")
 
 let type_decl =
   let%bind _ = keyword "td" in
