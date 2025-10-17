@@ -103,8 +103,37 @@ let many_acc (p : 'a t) (acc : 'a -> 'a list -> 'a list) : 'a list t =
         p.unparser inp (walk []) (fun _ -> eerr) cerr (eok []));
   }
 
+(* multi-parsers *)
+
 let many (p : 'a t) : 'a list t = many_acc p List.cons >>| List.rev
 let some (p : 'a t) : 'a list t = p >>| List.cons <*> many p
+
+let chain_left_1 p op =
+  let rec rest x =
+    (let%bind f = op in
+     let%bind y = p in
+     rest (f x y))
+    <|> return x
+  in
+  p >>= rest
+
+let chain_right_1 p op =
+  let rec rest x =
+    (let%bind f = op in
+     let%map r = p >>= rest in
+     f x r)
+    <|> return x
+  in
+  p >>= rest
+
+let sep_by_1 p ~sep =
+  let%bind x = p in
+  let%bind xs = many (sep >*> p) in
+  return (x :: xs)
+
+let sep_by p ~sep = sep_by_1 p ~sep <|> return []
+
+(* error manipulation *)
 
 let attempt (p : 'a t) : 'a t =
   {
@@ -113,6 +142,36 @@ let attempt (p : 'a t) : 'a t =
   }
 
 let fail : 'a t = { unparser = (fun _ _ _ _ eerr -> eerr ()) }
+
+(* lookahead *)
+
+let not_followed_by p =
+  {
+    unparser =
+      (fun inp _ eok _ eerr ->
+        p.unparser inp
+          (fun _ _ -> eerr)
+          (fun _ -> eerr)
+          (fun _ -> eok ())
+          (eok ()));
+  }
+
+(* misc *)
+
+let between ~l p ~r = l >*> p <*< r
+
+let option (p : 'a t) ~(def : 'a) : 'a t =
+  {
+    unparser =
+      (fun inp cok eok _ _ ->
+        p.unparser inp cok eok (fun _ -> eok def) (eok def));
+  }
+
+let defer (f : unit -> 'a t) : 'a t =
+  {
+    unparser =
+      (fun inp cok eok cerr eerr -> (f ()).unparser inp cok eok cerr eerr);
+  }
 
 (*
 combinators which are more string-related
