@@ -3,7 +3,47 @@ open Peasec
 open Let_syntax
 
 let keywords =
-  Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td"; "of" ]
+  Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td"; "of"; "with" ]
+
+let symbols =
+  [
+    ":=";
+    "(";
+    ")";
+    ",";
+    "|";
+    "->";
+    "*";
+    "=";
+    "{";
+    "}";
+    "[";
+    "]";
+    "+";
+    "-";
+    "/";
+    "++";
+    "'";
+  ]
+
+let symbol_trie =
+  match
+    Trie.of_alist Trie.Of_string.Keychain.keychainable
+      (List.map symbols ~f:(fun s -> (s, ())))
+  with
+  | Ok s -> s
+  | _ -> assert false
+
+(* TODO: work out what's going on with the empty string stuff *)
+let symbol s =
+  let go p s =
+    Trie.foldi (Trie.find_trie symbol_trie s) ~init:p
+      ~f:(fun acc ~keychain ~data:_ ->
+        if not (String.is_empty keychain) then
+          acc <*< not_followed_by (string keychain)
+        else acc)
+  in
+  lexeme (attempt (go (string s) s))
 
 let id_char = letter <|> digit <|> char '_'
 
@@ -34,7 +74,6 @@ and binding () =
   let%bind _ = symbol "=" in
   let%bind e1 = expr () in
   let%bind _ = keyword "in" in
-  let%bind _ = spaces_1 in
   let%map e2 = expr () in
   Ast.Binding (x, e1, e2)
 
@@ -52,11 +91,7 @@ and append () =
 
 and add () =
   chain_left_1 (mul ())
-    (let%map x =
-       attempt
-         (char '+' <*< not_followed_by (char '+') <*< spaces >>| String.of_char)
-       <|> symbol "-"
-     in
+    (let%map x = symbol "+" <|> symbol "-" in
      fun l r ->
        match x with
        | "+" -> Ast.BinOp (l, Ast.Plus, r)

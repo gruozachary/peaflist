@@ -116,9 +116,6 @@ val lexeme : 'a t -> 'a t
 val fully : 'a t -> 'a t
 (** A parser that consumes leading whitespace and checks for eof *)
 
-val symbol : Base.string -> Base.string t
-(** A combination of lexeme and string *)
-
 module Let_syntax : sig
   module Let_syntax : sig
     val return : 'a -> 'a t

@@ -201,7 +201,6 @@ let string s =
   string_check 0
 
 let lexeme p = p <*< spaces
-let symbol s = lexeme (string s)
 
 (* eof stuff *)
 
