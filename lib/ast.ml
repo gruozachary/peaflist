@@ -1,8 +1,11 @@
+open! Base
+open Sexplib.Std
+
 type nonrec int = int
-type id = string
-type ty_id = string
-type ty_var = string
-type bin_op = Plus | Sub | Mul | Div | Append
+type id = string [@@deriving sexp]
+type ty_id = string [@@deriving sexp]
+type ty_var = string [@@deriving sexp]
+type bin_op = Plus | Sub | Mul | Div | Append [@@deriving sexp]
 
 type expr =
   | Int of int
@@ -15,11 +18,14 @@ type expr =
   | List of expr list
   | Tuple of expr list
   | BinOp of expr * bin_op * expr
+[@@deriving sexp]
 
 type ty = TyId of id | TyApp of ty * ty | TyProd of ty * ty | TyFun of ty * ty
+[@@deriving sexp]
 
 type decl =
   | ValDecl of id * expr
   | TypeDecl of id * ty_var list * (id * ty option) list
+[@@deriving sexp]
 
-type prog = decl list
+type prog = decl list [@@deriving sexp]
