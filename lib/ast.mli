@@ -11,6 +11,7 @@ type expr =
   | Group of expr
   | Lambda of id * expr
   | Binding of id * expr * expr
+  | Match of expr * (expr * expr) list
   | List of expr list
   | Tuple of expr list
   | BinOp of expr * bin_op * expr

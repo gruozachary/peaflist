@@ -66,7 +66,7 @@ let keyword (s : string) : unit t = lexeme (string s >*> not_followed_by id_char
 and int : Ast.int t =
   lexeme (some digit >>| String.of_char_list >>| Int.of_string)
 
-let rec expr () = choice [ binding (); lambda (); append () ]
+let rec expr () = choice [ binding (); lambda (); matching (); append () ]
 
 and binding () =
   let%bind _ = attempt (keyword "let") in
@@ -83,6 +83,18 @@ and lambda () =
   let%bind _ = symbol "->" in
   let%map e = expr () in
   Ast.Lambda (x, e)
+
+and matching () =
+  let%bind _ = attempt (keyword "match") in
+  let%bind e = expr () in
+  let%bind _ = keyword "with" in
+  let%map es =
+    some
+      (let%bind e'1 = symbol "|" >*> expr () in
+       let%map e'2 = symbol "->" >*> expr () in
+       (e'1, e'2))
+  in
+  Ast.Match (e, es)
 
 and append () =
   chain_right_1 (add ())

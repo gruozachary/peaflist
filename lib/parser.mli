@@ -12,11 +12,12 @@
 
   Expr      ::= Int
               | Id
-              | Expr Expr                       function application
-              | "(" Expr ")"                    group
-              | "fun" Id "->" Expr              lamda
-              | "let" Id "=" Expr "in" Expr     binding
-              | "{" ( Expr ( "," Expr)* )? "}"  tuple
+              | Expr Expr                                   function application
+              | "(" Expr ")"                                group
+              | "fun" Id "->" Expr                          lamda
+              | "let" Id "=" Expr "in" Expr                 binding
+              | "match" Expr "with" ("|" Expr "->" Expr)+   match
+              | "{" ( Expr ( "," Expr)* )? "}"              tuple
               | "[" ListElems? "]"
               | Expr BinOp Expr
               ;
