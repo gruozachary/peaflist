@@ -1,6 +1,6 @@
 open Ppxlib
 
-let expand_sqc_test ~loc ~path:_ (expr : expression) =
+let expand_program_tests ~loc ~path:_ (expr : expression) =
   [%stri
     let%test _ =
       let ast_result =
@@ -21,8 +21,8 @@ let expand_sqc_test ~loc ~path:_ (expr : expression) =
       | _ -> false]
 
 let ext =
-  Extension.declare "sqc_tests" Extension.Context.structure_item
+  Extension.declare "program_tests" Extension.Context.structure_item
     Ast_pattern.(single_expr_payload __)
-    expand_sqc_test
+    expand_program_tests
 
 let () = Driver.register_transformation ~extensions:[ ext ] "ppx_test"

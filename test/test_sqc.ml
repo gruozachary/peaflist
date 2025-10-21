@@ -1,5 +1,6 @@
 open! Base
 open Example_programs
 
-[%%sqc_tests val_declaration]
-[%%sqc_tests val_declaration_crazy_whitespace]
+[%%program_tests empty]
+[%%program_tests val_declaration]
+[%%program_tests val_declaration_crazy_whitespace]
