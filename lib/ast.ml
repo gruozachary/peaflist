@@ -1,11 +1,10 @@
 open! Base
-open Sexplib.Std
 
 type nonrec int = int
-type id = string [@@deriving sexp]
-type ty_id = string [@@deriving sexp]
-type ty_var = string [@@deriving sexp]
-type bin_op = Plus | Sub | Mul | Div | Append [@@deriving sexp]
+type id = string [@@deriving eq]
+type ty_id = string [@@deriving eq]
+type ty_var = string [@@deriving eq]
+type bin_op = Plus | Sub | Mul | Div | Append [@@deriving eq]
 
 type expr =
   | Int of int
@@ -18,14 +17,14 @@ type expr =
   | List of expr list
   | Tuple of expr list
   | BinOp of expr * bin_op * expr
-[@@deriving sexp]
+[@@deriving eq]
 
 type ty = TyId of id | TyApp of ty * ty | TyProd of ty * ty | TyFun of ty * ty
-[@@deriving sexp]
+[@@deriving eq]
 
 type decl =
   | ValDecl of id * expr
   | TypeDecl of id * ty_var list * (id * ty option) list
-[@@deriving sexp]
+[@@deriving eq]
 
-type prog = decl list [@@deriving sexp]
+type prog = decl list [@@deriving eq]
