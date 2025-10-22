@@ -10,7 +10,6 @@ depends: [
   "dune" {>= "3.20"}
   "ocaml"
   "base"
-  "ppx_jane"
   "base_trie"
   "ppx_deriving"
   "odoc" {with-doc}

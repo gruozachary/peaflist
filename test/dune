@@ -2,4 +2,4 @@
  (name test_sqc)
  (inline_tests)
  (libraries sqc)
- (preprocess (pps ppx_test ppx_jane)))
+ (preprocess (pps ppx_test ppx_inline_test)))
