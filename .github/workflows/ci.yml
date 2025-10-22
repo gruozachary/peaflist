@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-deps:
+    runs-on: ubuntu-latest
+
+    container:
+      image: ocaml/opam
+      options: --user 0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache opam switch
+        uses: actions/cache@v4
+        with:
+          path: _opam
+          key: opam-${{ runner.os }}-${{ hashFiles('*.opam') }}
+
+      - name: Give workspace to opam user
+        run: chown -R opam:opam "$GITHUB_WORKSPACE"
+
+      - name: Set up switch
+        env:
+          HOME: /home/opam
+        run: |
+          [ -d '_opam' ] || su -s /bin/bash opam -c '
+            opam switch create . ocaml-base-compiler.5.3.0 --deps-only -y
+          '
+
+  format-check:
+    needs: build-deps
+    runs-on: ubuntu-latest
+
+    container:
+      image: ocaml/opam
+      options: --user 0
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache opam switch
+        uses: actions/cache@v4
+        with:
+          path: _opam
+          key: opam-${{ runner.os }}-${{ hashFiles('*.opam') }}
+
+      - name: Give workspace to opam user
+        run: chown -R opam:opam "$GITHUB_WORKSPACE"
+
+      - name: Run formatter
+        env:
+          HOME: /home/opam
+        run: |
+          su -s /bin/bash opam -c '
+            opam exec -- dune fmt
+          '
+
+      - name: Check diff
+        env:
+          HOME: /home/opam
+        run: |
+          su -s /bin/bash opam -c '
+            git diff --quiet
+          '
+
+  run-tests:
+    needs: build-deps
+    runs-on: ubuntu-latest
+
+    container:
+      image: ocaml/opam
+      options: --user 0
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache opam switch
+        uses: actions/cache@v4
+        with:
+          path: _opam
+          key: opam-${{ runner.os }}-${{ hashFiles('*.opam') }}
+
+      - name: Give workspace to opam user
+        run: chown -R opam:opam "$GITHUB_WORKSPACE"
+
+      - name: Run tests
+        env:
+          HOME: /home/opam
+        run: |
+          su -s /bin/bash opam -c '
+            opam exec -- dune runtest
+          '

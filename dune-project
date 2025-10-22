@@ -15,6 +15,6 @@
  (name sqc)
  (synopsis "A funny little compiler")
  (description "How funny")
- (depends ocaml))
+ (depends ocaml base base_trie ppx_deriving))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

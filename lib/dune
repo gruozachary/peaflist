@@ -1,4 +1,4 @@
 (library
  (name sqc)
  (libraries base base_trie)
- (preprocess (pps ppx_jane ppx_deriving.eq)))
+ (preprocess (pps ppx_let ppx_deriving.eq)))
