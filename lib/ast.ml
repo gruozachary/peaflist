@@ -4,7 +4,14 @@ type nonrec int = int
 type id = string [@@deriving eq]
 type ty_id = string [@@deriving eq]
 type ty_var = string [@@deriving eq]
-type bin_op = Plus | Sub | Mul | Div | Append [@@deriving eq]
+
+type bin_op =
+  | Plus
+  | Sub
+  | Mul
+  | Div
+  | Append
+[@@deriving eq]
 
 type expr =
   | Int of int
@@ -19,7 +26,11 @@ type expr =
   | BinOp of expr * bin_op * expr
 [@@deriving eq]
 
-type ty = TyId of id | TyApp of ty * ty | TyProd of ty * ty | TyFun of ty * ty
+type ty =
+  | TyId of id
+  | TyApp of ty * ty
+  | TyProd of ty * ty
+  | TyFun of ty * ty
 [@@deriving eq]
 
 type decl =
