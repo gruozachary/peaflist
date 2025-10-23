@@ -1,5 +1,6 @@
 (library
-  (name ppx_test)
-  (kind ppx_rewriter)
-  (libraries ppxlib)
-  (preprocess (pps ppxlib.metaquot)))
+ (name ppx_test)
+ (kind ppx_rewriter)
+ (libraries ppxlib)
+ (preprocess
+  (pps ppxlib.metaquot)))
