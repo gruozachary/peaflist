@@ -59,6 +59,7 @@ jobs:
           HOME: /home/opam
         run: |
           su -s /bin/bash opam -c '
+            opam install ocamlformat
             opam exec -- dune fmt
           '
 
