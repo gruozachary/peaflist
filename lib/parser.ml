@@ -178,14 +178,13 @@ and ty_prod () =
 
 and ty_app () =
   let%bind head =
-    between
-      ~l:(symbol "(")
-      ~r:(symbol ")")
-      (match%bind sep_by_1 ~sep:(symbol ",") (defer ty) with
-       | [ x ] -> return x
-       | xs ->
-         let%map tid = ty_id in
-         Ast.TyApp (tid, xs))
+    (match%bind
+       between ~l:(symbol "(") ~r:(symbol ")") (sep_by_1 ~sep:(symbol ",") (defer ty))
+     with
+     | [ x ] -> return x
+     | xs ->
+       let%map tid = ty_id in
+       Ast.TyApp (tid, xs))
     <|>
     let%map x = ty_id in
     Ast.TyId x
