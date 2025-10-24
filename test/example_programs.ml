@@ -56,8 +56,7 @@ vd length := fun l ->
           ( "list"
           , [ "'a" ]
           , [ ( "Cons"
-              , Some
-                  (Ast.TyProd (Ast.TyId "'a", Ast.TyApp (Ast.TyId "'a", Ast.TyId "list")))
+              , Some (Ast.TyProd [ Ast.TyId "'a"; Ast.TyApp ("list", [ Ast.TyId "'a" ]) ])
               )
             ; "Nil", None
             ] )

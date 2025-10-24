@@ -28,8 +28,8 @@ type expr =
 
 type ty =
   | TyId of id
-  | TyApp of ty * ty
-  | TyProd of ty * ty
+  | TyApp of id * ty list
+  | TyProd of ty list
   | TyFun of ty * ty
 [@@deriving eq]
 

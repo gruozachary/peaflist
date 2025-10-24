@@ -166,21 +166,32 @@ and ty_fun () =
     (let%map _ = symbol "->" in
      fun lt rt -> Ast.TyFun (lt, rt))
 
-and ty_prod () =
+(*and ty_prod () =
   chain_right_1
     (ty_app ())
     (let%map _ = symbol "*" in
-     fun lt rt -> Ast.TyProd (lt, rt))
+     fun lt rt -> Ast.TyProd (lt, rt)) *)
+and ty_prod () =
+  match%map sep_by_1 ~sep:(symbol "*") (ty_app ()) with
+  | [ x ] -> x
+  | xs -> Ast.TyProd xs
 
 and ty_app () =
-  let%bind x = ty_atom () in
-  let%map xs = many (ty_atom ()) in
-  List.fold ~init:x ~f:(fun lt rt -> Ast.TyApp (lt, rt)) xs
-
-and ty_atom () =
-  (let%map x = ty_id in
-   Ast.TyId x)
-  <|> between ~l:(symbol "(") (defer ty) ~r:(symbol ")")
+  let%bind head =
+    between
+      ~l:(symbol "(")
+      ~r:(symbol ")")
+      (match%bind sep_by_1 ~sep:(symbol ",") (defer ty) with
+       | [ x ] -> return x
+       | xs ->
+         let%map tid = ty_id in
+         Ast.TyApp (tid, xs))
+    <|>
+    let%map x = ty_id in
+    Ast.TyId x
+  in
+  let%map rest = many ty_id in
+  List.fold ~init:head ~f:(fun acc t -> Ast.TyApp (t, [ acc ])) rest
 ;;
 
 let type_decl =
