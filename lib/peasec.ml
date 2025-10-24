@@ -104,6 +104,30 @@ let many_acc (p : 'a t) (acc : 'a -> 'a list -> 'a list) : 'a list t =
   }
 ;;
 
+(* error manipulation *)
+
+let attempt (p : 'a t) : 'a t =
+  { unparser = (fun inp cok eok _ eerr -> p.unparser inp cok eok (fun _ -> eerr) eerr) }
+;;
+
+let fail : 'a t = { unparser = (fun _ _ _ _ eerr -> eerr ()) }
+
+(* lookahead *)
+
+let not_followed_by p =
+  { unparser =
+      (fun inp _ eok _ eerr ->
+        p.unparser inp (fun _ _ -> eerr) (fun _ -> eerr) (fun _ -> eok ()) (eok ()))
+  }
+;;
+
+let followed_by p =
+  { unparser =
+      (fun inp _ eok _ eerr ->
+        p.unparser inp (fun _ _ -> eok ()) (fun _ -> eok ()) (fun _ -> eerr) eerr)
+  }
+;;
+
 (* multi-parsers *)
 
 let many (p : 'a t) : 'a list t = many_acc p List.cons >>| List.rev
@@ -136,23 +160,6 @@ let sep_by_1 p ~sep =
 ;;
 
 let sep_by p ~sep = sep_by_1 p ~sep <|> return []
-
-(* error manipulation *)
-
-let attempt (p : 'a t) : 'a t =
-  { unparser = (fun inp cok eok _ eerr -> p.unparser inp cok eok (fun _ -> eerr) eerr) }
-;;
-
-let fail : 'a t = { unparser = (fun _ _ _ _ eerr -> eerr ()) }
-
-(* lookahead *)
-
-let not_followed_by p =
-  { unparser =
-      (fun inp _ eok _ eerr ->
-        p.unparser inp (fun _ _ -> eerr) (fun _ -> eerr) (fun _ -> eok ()) (eok ()))
-  }
-;;
 
 (* misc *)
 
