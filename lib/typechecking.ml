@@ -3,7 +3,7 @@ open! Base
 type alpha = string
 
 type tau =
-  | TVar of int
+  | TVar of alpha
   | TFun of tau * tau
   | TProd of tau * tau
   | TApp of tau * tau
@@ -33,7 +33,23 @@ module State = struct
   let fresh s =
     let v = s.next in
     s.next <- v + 1;
-    TVar v
+    TVar ("_'_tvar" ^ Int.to_string v)
+  ;;
+end
+
+module Subst = struct
+  type t = (alpha, tau, String.comparator_witness) Map.t
+
+  let rec apply ~sub t =
+    match t with
+    | TVar x ->
+      (match Map.find sub x with
+       | Some t' -> t'
+       | None -> t)
+    | TFun (t'0, t'1) -> TFun (apply ~sub t'0, apply ~sub t'1)
+    | TProd (t'0, t'1) -> TProd (apply ~sub t'0, apply ~sub t'1)
+    | TApp (t'0, t'1) -> TApp (apply ~sub t'0, apply ~sub t'1)
+    | TCon _ -> t
   ;;
 end
 
