@@ -3,7 +3,7 @@ open! Base
 type alpha = string
 
 type tau =
-  | TVar of alpha
+  | TVar of int
   | TFun of tau * tau
   | TProd of tau * tau
   | TApp of tau * tau
@@ -25,8 +25,24 @@ end = struct
   let lookup env tid = Map.find env tid
 end
 
+module State = struct
+  type t = { mutable next : int }
+
+  let create () = { next = 0 }
+
+  let fresh s =
+    let v = s.next in
+    s.next <- v + 1;
+    TVar v
+  ;;
+end
+
 type error = string
-type ctx = { env : Gamma.t }
+
+type ctx =
+  { env : Gamma.t
+  ; state : State.t
+  }
 
 let rec typecheck_expr ~(ctx : ctx) (e : Ast.expr) : (tau, error) Result.t =
   match e with
