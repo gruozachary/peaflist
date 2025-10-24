@@ -74,6 +74,9 @@ val choice : 'a t list -> 'a t
 (** Negative lookahead *)
 val not_followed_by : 'a t -> unit t
 
+(** Positive lookahead *)
+val followed_by : 'a t -> unit t
+
 (** Combinator that consumes a list separated by separators (at least one)*)
 val sep_by_1 : 'a t -> sep:'b t -> 'a list t
 

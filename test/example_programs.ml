@@ -56,8 +56,7 @@ vd length := fun l ->
           ( "list"
           , [ "'a" ]
           , [ ( "Cons"
-              , Some
-                  (Ast.TyProd (Ast.TyId "'a", Ast.TyApp (Ast.TyId "'a", Ast.TyId "list")))
+              , Some (Ast.TyProd [ Ast.TyId "'a"; Ast.TyApp ("list", [ Ast.TyId "'a" ]) ])
               )
             ; "Nil", None
             ] )
@@ -73,6 +72,47 @@ vd length := fun l ->
                           (Ast.Int 1, Ast.Plus, Ast.Apply (Ast.Id "length", Ast.Id "xs"))
                       )
                     ] ) ) )
+      ]
+  }
+;;
+
+(*
+   Sqc.Peasec.exec Sqc.Parser.prog "
+td ('a, 'b) test :=
+  | A of ('a, 'b, int) tri option * char -> lol * int * long chain types -> ('a, 'b) result
+";;
+*)
+let nasty_type =
+  { str =
+      {|
+td ('a, 'b) test :=
+  | A of ('a, 'b, int) tri option * char -> lol * int * long chain types -> ('a, 'b) result
+|}
+  ; ast =
+      [ Ast.TypeDecl
+          ( "test"
+          , [ "'a"; "'b" ]
+          , [ ( "A"
+              , Some
+                  (Ast.TyFun
+                     ( Ast.TyProd
+                         [ Ast.TyApp
+                             ( "option"
+                             , [ Ast.TyApp
+                                   ( "tri"
+                                   , [ Ast.TyId "'a"; Ast.TyId "'b"; Ast.TyId "int" ] )
+                               ] )
+                         ; Ast.TyId "char"
+                         ]
+                     , Ast.TyFun
+                         ( Ast.TyProd
+                             [ Ast.TyId "lol"
+                             ; Ast.TyId "int"
+                             ; Ast.TyApp
+                                 ("types", [ Ast.TyApp ("chain", [ Ast.TyId "long" ]) ])
+                             ]
+                         , Ast.TyApp ("result", [ Ast.TyId "'a"; Ast.TyId "'b" ]) ) )) )
+            ] )
       ]
   }
 ;;
