@@ -77,6 +77,33 @@ module Subst = struct
       then Result.Error "Recursive type variable definiton"
       else Result.Ok (Map.add_exn sub ~key:tvar ~data:t)
   ;;
+
+  let rec unify ~sub t0 t1 =
+    let open Result.Let_syntax in
+    let t0' = apply ~sub t0 in
+    let t1' = apply ~sub t1 in
+    match t0', t1' with
+    | TVar x, t | t, TVar x -> add ~sub x t
+    | TCon c0, TCon c1 when equal_concrete c0 c1 -> Result.Ok sub
+    | TFun (l0, r0), TFun (l1, r1) ->
+      let%bind sub' = unify ~sub l0 l1 in
+      unify ~sub:sub' (apply ~sub:sub' r0) (apply ~sub:sub' r1)
+    | TProd ts0, TProd ts1 ->
+      (match
+         List.fold2
+           ~init:(Result.Ok sub)
+           ~f:(fun res_sub t'0 t'1 ->
+             let%bind sub = res_sub in
+             unify ~sub t'0 t'1)
+           ts0
+           ts1
+       with
+       | List.Or_unequal_lengths.Ok x -> x
+       | List.Or_unequal_lengths.Unequal_lengths ->
+         Result.Error "Tuple arity must be the same")
+    | TApp (_tvar0, _ts0), TApp (_tvar1, _ts1) -> assert false (* TODO: implement *)
+    | _ -> assert false
+  ;;
 end
 
 type error = string
