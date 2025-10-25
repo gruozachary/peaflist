@@ -7,8 +7,7 @@
 
   Type      ::= ProdType ( "->" ProdType)* ;
   ProdType  ::= AppType ( "*" AppType )* ;
-  AppType   ::= AtomType AtomType
-  AtomType  ::= TId | "(" Type ")" ;
+  AppType   ::= ( "(" Type ( "," Type )* ")" Tid | TId ) TId*
 
   Expr      ::= Int
               | Id
