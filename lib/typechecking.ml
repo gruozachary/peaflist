@@ -39,7 +39,7 @@ module Scheme = struct
   type t = Forall of alpha list * Tau.t
 
   let free_tvars = function
-    | Forall (qs, t) -> Set.diff (Set.of_list (module String) qs) (Tau.free_tvars t)
+    | Forall (qs, ty) -> Set.diff (Set.of_list (module String) qs) (Tau.free_tvars ty)
   ;;
 end
 
@@ -82,60 +82,60 @@ end
 module Subst = struct
   type t = (alpha, Tau.t, String.comparator_witness) Map.t
 
-  let rec apply_type ~sub t =
-    match t with
+  let rec apply_type ~sub ty =
+    match ty with
     | Tau.TVar x ->
       (match Map.find sub x with
-       | Some t' -> t'
-       | None -> t)
-    | Tau.TFun (t'0, t'1) -> TFun (apply_type ~sub t'0, apply_type ~sub t'1)
-    | Tau.TProd t's -> TProd (List.map t's ~f:(apply_type ~sub))
-    | Tau.TApp (tvar, t's) -> TApp (tvar, List.map t's ~f:(apply_type ~sub))
-    | Tau.TCon _ -> t
+       | Some ty' -> ty'
+       | None -> ty)
+    | Tau.TFun (ty0, ty1) -> TFun (apply_type ~sub ty0, apply_type ~sub ty1)
+    | Tau.TProd tys -> TProd (List.map tys ~f:(apply_type ~sub))
+    | Tau.TApp (tvar, tys) -> TApp (tvar, List.map tys ~f:(apply_type ~sub))
+    | Tau.TCon _ -> ty
 
   and apply_scheme ~sub sc =
-    let (Scheme.Forall (fa, t)) = sc in
-    let sub' = Map.filter_keys sub ~f:(fun x -> List.exists fa ~f:(equal_string x)) in
-    Scheme.Forall (fa, apply_type ~sub:sub' t)
+    let (Scheme.Forall (qs, ty)) = sc in
+    let sub' = Map.filter_keys sub ~f:(fun tv -> List.exists qs ~f:(equal_string tv)) in
+    Scheme.Forall (qs, apply_type ~sub:sub' ty)
 
   and apply_gamma ~sub env = Gamma.map env ~f:(apply_scheme ~sub)
 
-  let add ~sub tvar t =
-    match t with
-    | Tau.TVar x ->
-      if equal_string x tvar
+  let add ~sub tv ty =
+    match ty with
+    | Tau.TVar tv' ->
+      if equal_string tv tv'
       then Result.Ok sub
-      else Result.Ok (Map.add_exn sub ~key:tvar ~data:t)
+      else Result.Ok (Map.add_exn sub ~key:tv ~data:ty)
     | _ ->
-      if Tau.occurs tvar t
+      if Tau.occurs tv ty
       then Result.Error "Recursive type variable definiton"
-      else Result.Ok (Map.add_exn sub ~key:tvar ~data:t)
+      else Result.Ok (Map.add_exn sub ~key:tv ~data:ty)
   ;;
 
-  let rec unify ~sub t0 t1 =
+  let rec unify ~sub ty0 ty1 =
     let open Result.Let_syntax in
-    let t0' = apply_type ~sub t0 in
-    let t1' = apply_type ~sub t1 in
-    match t0', t1' with
-    | TVar x, t | t, TVar x -> add ~sub x t
+    let ty0' = apply_type ~sub ty0 in
+    let ty1' = apply_type ~sub ty1 in
+    match ty0', ty1' with
+    | TVar tv, ty | ty, TVar tv -> add ~sub tv ty
     | TCon c0, TCon c1 when Tau.equal_concrete c0 c1 -> Result.Ok sub
-    | TFun (l0, r0), TFun (l1, r1) ->
-      let%bind sub' = unify ~sub l0 l1 in
-      unify ~sub:sub' (apply_type ~sub:sub' r0) (apply_type ~sub:sub' r1)
-    | TProd ts0, TProd ts1 ->
+    | TFun (ty_l0, ty_r0), TFun (ty_l1, ty_r1) ->
+      let%bind sub' = unify ~sub ty_l0 ty_l1 in
+      unify ~sub:sub' (apply_type ~sub:sub' ty_r0) (apply_type ~sub:sub' ty_r1)
+    | TProd tys, TProd tys' ->
       (match
          List.fold2
            ~init:(Result.Ok sub)
            ~f:(fun res_sub t'0 t'1 ->
              let%bind sub = res_sub in
              unify ~sub t'0 t'1)
-           ts0
-           ts1
+           tys
+           tys'
        with
        | List.Or_unequal_lengths.Ok x -> x
        | List.Or_unequal_lengths.Unequal_lengths ->
          Result.Error "Tuple arity must be the same")
-    | TApp (_tvar0, _ts0), TApp (_tvar1, _ts1) -> assert false (* TODO: implement *)
+    | TApp (_tv, _tys), TApp (_tv', _tys') -> assert false (* TODO: implement *)
     | _ -> assert false
   ;;
 end
