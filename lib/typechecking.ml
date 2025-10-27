@@ -2,43 +2,57 @@ open! Base
 
 type alpha = string
 
-type concrete =
-  | Int
-  | Unit
-[@@deriving eq]
+module Tau = struct
+  type concrete =
+    | Int
+    | Unit
+  [@@deriving eq]
 
-type tau =
-  | TVar of alpha
-  | TFun of tau * tau
-  | TProd of tau list
-  | TApp of alpha * tau list
-  | TCon of concrete
+  type t =
+    | TVar of alpha
+    | TFun of t * t
+    | TProd of t list
+    | TApp of alpha * t list
+    | TCon of concrete
+
+  let rec free_tvars = function
+    | TVar tvar -> Set.of_list (module String) [ tvar ]
+    | TFun (t0, t1) -> Set.union (free_tvars t0) (free_tvars t1)
+    | TProd ts -> Set.union_list (module String) (List.map ~f:(fun t -> free_tvars t) ts)
+    | TApp (_, ts) ->
+      Set.union_list (module String) (List.map ~f:(fun t -> free_tvars t) ts)
+    | TCon _ -> Set.empty (module String)
+  ;;
+
+  let rec occurs tvar t : bool =
+    match t with
+    | TVar x -> equal_string x tvar
+    | TFun (t'0, t'1) -> occurs tvar t'0 || occurs tvar t'1
+    | TProd ts -> List.exists ~f:(occurs tvar) ts
+    | TApp (tvar', ts) -> equal_string tvar tvar' || List.exists ~f:(occurs tvar) ts
+    | TCon _ -> false
+  ;;
+end
 
 (*TODO: consider changing this to set*)
-type scheme = alpha list * tau
+module Scheme = struct
+  type t = Forall of alpha list * Tau.t
 
-let rec free_tvars = function
-  | TVar tvar -> Set.of_list (module String) [ tvar ]
-  | TFun (t0, t1) -> Set.union (free_tvars t0) (free_tvars t1)
-  | TProd ts -> Set.union_list (module String) (List.map ~f:(fun t -> free_tvars t) ts)
-  | TApp (_, ts) ->
-    Set.union_list (module String) (List.map ~f:(fun t -> free_tvars t) ts)
-  | TCon _ -> Set.empty (module String)
-
-and free_tvars_scheme = function
-  | qs, t -> Set.diff (Set.of_list (module String) qs) (free_tvars t)
-;;
+  let free_tvars = function
+    | Forall (qs, t) -> Set.diff (Set.of_list (module String) qs) (Tau.free_tvars t)
+  ;;
+end
 
 module Gamma : sig
   type t
 
   val empty : t
-  val introduce : t -> alpha -> scheme -> t
-  val lookup : t -> alpha -> scheme Option.t
-  val map : t -> f:(scheme -> scheme) -> t
+  val introduce : t -> alpha -> Scheme.t -> t
+  val lookup : t -> alpha -> Scheme.t Option.t
+  val map : t -> f:(Scheme.t -> Scheme.t) -> t
   val free_tvars : t -> (alpha, String.comparator_witness) Set.t
 end = struct
-  type t = (alpha, scheme, String.comparator_witness) Map.t
+  type t = (alpha, Scheme.t, String.comparator_witness) Map.t
 
   let empty : t = Map.empty (module String)
   let introduce env tid sc = Map.add_exn env ~key:tid ~data:sc
@@ -49,18 +63,9 @@ end = struct
     Map.fold
       env
       ~init:(Set.empty (module String))
-      ~f:(fun ~key:_ ~data acc -> Set.union acc (free_tvars_scheme data))
+      ~f:(fun ~key:_ ~data acc -> Set.union acc (Scheme.free_tvars data))
   ;;
 end
-
-let rec occurs (tvar : alpha) (t : tau) : bool =
-  match t with
-  | TVar x -> equal_string x tvar
-  | TFun (t'0, t'1) -> occurs tvar t'0 || occurs tvar t'1
-  | TProd ts -> List.exists ~f:(occurs tvar) ts
-  | TApp (tvar', ts) -> equal_string tvar tvar' || List.exists ~f:(occurs tvar) ts
-  | TCon _ -> false
-;;
 
 module State = struct
   type t = { mutable next : int }
@@ -70,39 +75,39 @@ module State = struct
   let fresh s =
     let v = s.next in
     s.next <- v + 1;
-    TVar ("_'_tvar" ^ Int.to_string v)
+    Tau.TVar ("_'_tvar" ^ Int.to_string v)
   ;;
 end
 
 module Subst = struct
-  type t = (alpha, tau, String.comparator_witness) Map.t
+  type t = (alpha, Tau.t, String.comparator_witness) Map.t
 
   let rec apply_type ~sub t =
     match t with
-    | TVar x ->
+    | Tau.TVar x ->
       (match Map.find sub x with
        | Some t' -> t'
        | None -> t)
-    | TFun (t'0, t'1) -> TFun (apply_type ~sub t'0, apply_type ~sub t'1)
-    | TProd t's -> TProd (List.map t's ~f:(apply_type ~sub))
-    | TApp (tvar, t's) -> TApp (tvar, List.map t's ~f:(apply_type ~sub))
-    | TCon _ -> t
+    | Tau.TFun (t'0, t'1) -> TFun (apply_type ~sub t'0, apply_type ~sub t'1)
+    | Tau.TProd t's -> TProd (List.map t's ~f:(apply_type ~sub))
+    | Tau.TApp (tvar, t's) -> TApp (tvar, List.map t's ~f:(apply_type ~sub))
+    | Tau.TCon _ -> t
 
   and apply_scheme ~sub sc =
-    let fa, t = sc in
+    let (Scheme.Forall (fa, t)) = sc in
     let sub' = Map.filter_keys sub ~f:(fun x -> List.exists fa ~f:(equal_string x)) in
-    fa, apply_type ~sub:sub' t
+    Scheme.Forall (fa, apply_type ~sub:sub' t)
 
   and apply_gamma ~sub env = Gamma.map env ~f:(apply_scheme ~sub)
 
   let add ~sub tvar t =
     match t with
-    | TVar x ->
+    | Tau.TVar x ->
       if equal_string x tvar
       then Result.Ok sub
       else Result.Ok (Map.add_exn sub ~key:tvar ~data:t)
     | _ ->
-      if occurs tvar t
+      if Tau.occurs tvar t
       then Result.Error "Recursive type variable definiton"
       else Result.Ok (Map.add_exn sub ~key:tvar ~data:t)
   ;;
@@ -113,7 +118,7 @@ module Subst = struct
     let t1' = apply_type ~sub t1 in
     match t0', t1' with
     | TVar x, t | t, TVar x -> add ~sub x t
-    | TCon c0, TCon c1 when equal_concrete c0 c1 -> Result.Ok sub
+    | TCon c0, TCon c1 when Tau.equal_concrete c0 c1 -> Result.Ok sub
     | TFun (l0, r0), TFun (l1, r1) ->
       let%bind sub' = unify ~sub l0 l1 in
       unify ~sub:sub' (apply_type ~sub:sub' r0) (apply_type ~sub:sub' r1)
