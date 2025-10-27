@@ -14,20 +14,43 @@ type tau =
   | TApp of alpha * tau list
   | TCon of concrete
 
-type sigma = alpha list * tau
+(*TODO: consider changing this to set*)
+type scheme = alpha list * tau
+
+let rec free_tvars = function
+  | TVar tvar -> Set.of_list (module String) [ tvar ]
+  | TFun (t0, t1) -> Set.union (free_tvars t0) (free_tvars t1)
+  | TProd ts -> Set.union_list (module String) (List.map ~f:(fun t -> free_tvars t) ts)
+  | TApp (_, ts) ->
+    Set.union_list (module String) (List.map ~f:(fun t -> free_tvars t) ts)
+  | TCon _ -> Set.empty (module String)
+
+and free_tvars_scheme = function
+  | qs, t -> Set.diff (Set.of_list (module String) qs) (free_tvars t)
+;;
 
 module Gamma : sig
   type t
 
   val empty : t
-  val introduce : t -> alpha -> tau -> t
-  val lookup : t -> alpha -> tau Option.t
+  val introduce : t -> alpha -> scheme -> t
+  val lookup : t -> alpha -> scheme Option.t
+  val map : t -> f:(scheme -> scheme) -> t
+  val free_tvars : t -> (alpha, String.comparator_witness) Set.t
 end = struct
-  type t = (alpha, tau, String.comparator_witness) Map.t
+  type t = (alpha, scheme, String.comparator_witness) Map.t
 
-  let empty = Map.empty (module String)
-  let introduce env tid ty = Map.add_exn env ~key:tid ~data:ty
+  let empty : t = Map.empty (module String)
+  let introduce env tid sc = Map.add_exn env ~key:tid ~data:sc
   let lookup env tid = Map.find env tid
+  let map env ~f = Map.map ~f env
+
+  let free_tvars env =
+    Map.fold
+      env
+      ~init:(Set.empty (module String))
+      ~f:(fun ~key:_ ~data acc -> Set.union acc (free_tvars_scheme data))
+  ;;
 end
 
 let rec occurs (tvar : alpha) (t : tau) : bool =
@@ -54,17 +77,23 @@ end
 module Subst = struct
   type t = (alpha, tau, String.comparator_witness) Map.t
 
-  let rec apply ~sub t =
+  let rec apply_type ~sub t =
     match t with
     | TVar x ->
       (match Map.find sub x with
        | Some t' -> t'
        | None -> t)
-    | TFun (t'0, t'1) -> TFun (apply ~sub t'0, apply ~sub t'1)
-    | TProd t's -> TProd (List.map t's ~f:(apply ~sub))
-    | TApp (tvar, t's) -> TApp (tvar, List.map t's ~f:(apply ~sub))
+    | TFun (t'0, t'1) -> TFun (apply_type ~sub t'0, apply_type ~sub t'1)
+    | TProd t's -> TProd (List.map t's ~f:(apply_type ~sub))
+    | TApp (tvar, t's) -> TApp (tvar, List.map t's ~f:(apply_type ~sub))
     | TCon _ -> t
-  ;;
+
+  and apply_scheme ~sub sc =
+    let fa, t = sc in
+    let sub' = Map.filter_keys sub ~f:(fun x -> List.exists fa ~f:(equal_string x)) in
+    fa, apply_type ~sub:sub' t
+
+  and apply_gamma ~sub env = Gamma.map env ~f:(apply_scheme ~sub)
 
   let add ~sub tvar t =
     match t with
@@ -80,14 +109,14 @@ module Subst = struct
 
   let rec unify ~sub t0 t1 =
     let open Result.Let_syntax in
-    let t0' = apply ~sub t0 in
-    let t1' = apply ~sub t1 in
+    let t0' = apply_type ~sub t0 in
+    let t1' = apply_type ~sub t1 in
     match t0', t1' with
     | TVar x, t | t, TVar x -> add ~sub x t
     | TCon c0, TCon c1 when equal_concrete c0 c1 -> Result.Ok sub
     | TFun (l0, r0), TFun (l1, r1) ->
       let%bind sub' = unify ~sub l0 l1 in
-      unify ~sub:sub' (apply ~sub:sub' r0) (apply ~sub:sub' r1)
+      unify ~sub:sub' (apply_type ~sub:sub' r0) (apply_type ~sub:sub' r1)
     | TProd ts0, TProd ts1 ->
       (match
          List.fold2
@@ -114,22 +143,16 @@ type ctx =
   ; subst : Subst.t
   }
 
-let rec typecheck_expr ~(ctx : ctx) (e : Ast.expr) : (tau, error) Result.t =
+(* let rec typecheck_expr ~(ctx : ctx) (e : Ast.expr) : (tau, error) Result.t =
   match e with
-  | Ast.Apply (_, _) -> Result.Error "Not implemented"
-  | Ast.BinOp (_, _, _) -> Result.Error "Not implemented"
-  | Ast.Binding (_, _, _) -> Result.Error "Not implemented"
-  | Ast.Group e -> typecheck_expr ~ctx e
-  | Ast.Id x -> Result.of_option (Gamma.lookup ctx.env x) ~error:"Undefined variable"
-  | Ast.Int _ -> Result.Ok (TCon Int)
-  | Ast.Lambda (_, _) -> Result.Error "Not implemented"
-  | Ast.List _ -> Result.Error "Not implemented"
-  | Ast.Match (_, _) -> Result.Error "Not implemented"
-  | Ast.Tuple es ->
-    (match es with
-     | [] -> Result.Ok (TCon Unit)
-     | es ->
-       let open Result.Let_syntax in
-       let%map ts = Result.all (List.map ~f:(typecheck_expr ~ctx) es) in
-       TProd ts)
-;;
+  | Ast.Apply (_, _) -> _
+  | Ast.BinOp (_, _, _) -> _
+  | Ast.Binding (_, _, _) -> _
+  | Ast.Group e -> _
+  | Ast.Id x -> _
+  | Ast.Int _ -> _
+  | Ast.Lambda (_, _) -> _
+  | Ast.List _ -> _
+  | Ast.Match (_, _) -> _
+  | Ast.Tuple es -> _
+;;*)
