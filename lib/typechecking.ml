@@ -138,6 +138,14 @@ module Subst = struct
     | TApp (_tv, _tys), TApp (_tv', _tys') -> assert false (* TODO: implement *)
     | _ -> assert false
   ;;
+
+  let compose sub sub' =
+    Map.merge sub sub' ~f:(fun ~key:_ e ->
+      match e with
+      | `Left ty -> Option.Some ty
+      | `Right ty -> Option.Some ty
+      | `Both (_, ty) -> Option.Some ty)
+  ;;
 end
 
 type error = string
