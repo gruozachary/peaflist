@@ -55,7 +55,7 @@ end = struct
   type t = (alpha, Scheme.t, String.comparator_witness) Map.t
 
   let empty : t = Map.empty (module String)
-  let introduce env tid sc = Map.add_exn env ~key:tid ~data:sc
+  let introduce env tid sc = Map.set env ~key:tid ~data:sc
   let lookup env tid = Map.find env tid
   let map env ~f = Map.map ~f env
 
