@@ -1,6 +1,7 @@
 open! Base
 open Peasec
 open Let_syntax
+open Ast
 
 let keywords =
   Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td"; "of"; "with" ]
@@ -79,14 +80,14 @@ and binding () =
   let%bind e1 = expr () in
   let%bind _ = keyword "in" in
   let%map e2 = expr () in
-  Ast.Binding (x, e1, e2)
+  Expr.Binding (x, e1, e2)
 
 and lambda () =
   let%bind _ = attempt (keyword "fun") in
   let%bind x = id in
   let%bind _ = symbol "->" in
   let%map e = expr () in
-  Ast.Lambda (x, e)
+  Expr.Lambda (x, e)
 
 and matching () =
   let%bind _ = attempt (keyword "match") in
@@ -98,13 +99,13 @@ and matching () =
        let%map e'2 = symbol "->" >*> expr () in
        e'1, e'2)
   in
-  Ast.Match (e, es)
+  Expr.Match (e, es)
 
 and append () =
   chain_right_1
     (add ())
     (let%map _ = symbol "++" in
-     fun l r -> Ast.BinOp (l, Ast.Append, r))
+     fun l r -> Expr.BinOp (l, Expr.Bin_op.Append, r))
 
 and add () =
   chain_left_1
@@ -112,8 +113,8 @@ and add () =
     (let%map x = symbol "+" <|> symbol "-" in
      fun l r ->
        match x with
-       | "+" -> Ast.BinOp (l, Ast.Plus, r)
-       | "-" -> Ast.BinOp (l, Ast.Sub, r)
+       | "+" -> Expr.BinOp (l, Expr.Bin_op.Plus, r)
+       | "-" -> Expr.BinOp (l, Expr.Bin_op.Sub, r)
        | _ -> assert false)
 
 and mul () =
@@ -122,31 +123,31 @@ and mul () =
     (let%map x = symbol "*" <|> symbol "/" in
      fun l r ->
        match x with
-       | "*" -> Ast.BinOp (l, Ast.Mul, r)
-       | "/" -> Ast.BinOp (l, Ast.Div, r)
+       | "*" -> Expr.BinOp (l, Expr.Bin_op.Mul, r)
+       | "/" -> Expr.BinOp (l, Expr.Bin_op.Div, r)
        | _ -> assert false)
 
 and apply () =
   let%bind x = atom () in
   let%map xs = many (atom ()) in
-  List.fold ~init:x ~f:(fun f x -> Ast.Apply (f, x)) xs
+  List.fold ~init:x ~f:(fun f x -> Expr.Apply (f, x)) xs
 
 and atom () =
   choice
     [ (let%map x = int in
-       Ast.Int x)
+       Expr.Int x)
     ; (let%map x = id in
-       Ast.Id x)
+       Expr.Id x)
     ; (let%map e = between ~l:(symbol "(") ~r:(symbol ")") (defer expr) in
-       Ast.Group e)
+       Expr.Group e)
     ; (let%map es =
          between ~l:(symbol "[") ~r:(symbol "]") (sep_by_1 ~sep:(symbol ",") (defer expr))
        in
-       Ast.List es)
+       Expr.List es)
     ; (let%map es =
          between ~l:(symbol "{") ~r:(symbol "}") (sep_by_1 ~sep:(symbol ",") (defer expr))
        in
-       Ast.Tuple es)
+       Expr.Tuple es)
     ]
 ;;
 
@@ -155,7 +156,7 @@ let val_decl =
   let%bind x = id in
   let%bind _ = symbol ":=" in
   let%map e = expr () in
-  Ast.ValDecl (x, e)
+  ValDecl (x, e)
 ;;
 
 let rec ty () = ty_fun ()
@@ -164,7 +165,7 @@ and ty_fun () =
   chain_right_1
     (ty_prod ())
     (let%map _ = symbol "->" in
-     fun lt rt -> Ast.TyFun (lt, rt))
+     fun lt rt -> Ty.Fun (lt, rt))
 
 (*and ty_prod () =
   chain_right_1
@@ -174,7 +175,7 @@ and ty_fun () =
 and ty_prod () =
   match%map sep_by_1 ~sep:(symbol "*") (ty_app ()) with
   | [ x ] -> x
-  | xs -> Ast.TyProd xs
+  | xs -> Ty.Prod xs
 
 and ty_app () =
   let%bind head =
@@ -184,13 +185,13 @@ and ty_app () =
      | [ x ] -> return x
      | xs ->
        let%map tid = ty_id in
-       Ast.TyApp (tid, xs))
+       Ty.App (tid, xs))
     <|>
     let%map x = ty_id in
-    Ast.TyId x
+    Ty.Id x
   in
   let%map rest = many ty_id in
-  List.fold ~init:head ~f:(fun acc t -> Ast.TyApp (t, [ acc ])) rest
+  List.fold ~init:head ~f:(fun acc t -> Ty.App (t, [ acc ])) rest
 ;;
 
 let type_decl =

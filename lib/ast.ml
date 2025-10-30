@@ -5,37 +5,43 @@ type id = string [@@deriving eq]
 type ty_id = string [@@deriving eq]
 type ty_var = string [@@deriving eq]
 
-type bin_op =
-  | Plus
-  | Sub
-  | Mul
-  | Div
-  | Append
-[@@deriving eq]
+module Expr = struct
+  module Bin_op = struct
+    type t =
+      | Plus
+      | Sub
+      | Mul
+      | Div
+      | Append
+    [@@deriving eq]
+  end
 
-type expr =
-  | Int of int
-  | Id of id
-  | Apply of expr * expr
-  | Group of expr
-  | Lambda of id * expr
-  | Binding of id * expr * expr
-  | Match of expr * (expr * expr) list
-  | List of expr list
-  | Tuple of expr list
-  | BinOp of expr * bin_op * expr
-[@@deriving eq]
+  type t =
+    | Int of int
+    | Id of id
+    | Apply of t * t
+    | Group of t
+    | Lambda of id * t
+    | Binding of id * t * t
+    | Match of t * (t * t) list
+    | List of t list
+    | Tuple of t list
+    | BinOp of t * Bin_op.t * t
+  [@@deriving eq]
+end
 
-type ty =
-  | TyId of id
-  | TyApp of id * ty list
-  | TyProd of ty list
-  | TyFun of ty * ty
-[@@deriving eq]
+module Ty = struct
+  type t =
+    | Id of id
+    | App of id * t list
+    | Prod of t list
+    | Fun of t * t
+  [@@deriving eq]
+end
 
 type decl =
-  | ValDecl of id * expr
-  | TypeDecl of id * ty_var list * (id * ty option) list
+  | ValDecl of id * Expr.t
+  | TypeDecl of id * ty_var list * (id * Ty.t option) list
 [@@deriving eq]
 
 type prog = decl list [@@deriving eq]
