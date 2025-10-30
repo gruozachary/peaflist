@@ -72,15 +72,19 @@ module State = struct
 
   let create () = { next = 0 }
 
-  let fresh s =
+  let fresh_tv s =
     let v = s.next in
     s.next <- v + 1;
-    Tau.TVar ("_'_tvar" ^ Int.to_string v)
+    "_'_tvar" ^ Int.to_string v
   ;;
+
+  let fresh s = Tau.TVar (fresh_tv s)
 end
 
 module Subst = struct
   type t = (alpha, Tau.t, String.comparator_witness) Map.t
+
+  let empty : t = Map.empty (module String)
 
   let rec apply_type ~sub ty =
     match ty with
@@ -155,6 +159,30 @@ type ctx =
   ; state : State.t
   ; subst : Subst.t
   }
+
+module W = struct
+  let instantiate ctx = function
+    | Scheme.Forall (qs, ty) ->
+      let sub =
+        List.fold
+          ~init:(Map.empty (module String))
+          ~f:(fun acc key -> Map.set acc ~key ~data:(State.fresh_tv ctx.state))
+          qs
+      in
+      let rec replace sub ty =
+        match ty with
+        | Tau.TVar tv ->
+          (match Map.find sub tv with
+           | Some tv' -> Tau.TVar tv'
+           | None -> ty)
+        | Tau.TFun (ty0, ty1) -> TFun (replace sub ty0, replace sub ty1)
+        | Tau.TProd tys -> TProd (List.map tys ~f:(replace sub))
+        | Tau.TApp (tvar, tys) -> TApp (tvar, List.map tys ~f:(replace sub))
+        | Tau.TCon _ -> ty
+      in
+      replace sub ty
+  ;;
+end
 
 (* let rec typecheck_expr ~(ctx : ctx) (e : Ast.expr) : (tau, error) Result.t =
   match e with
