@@ -118,39 +118,39 @@ module Subst = struct
       else Result.Ok (Map.add_exn sub ~key:tv ~data:ty)
   ;;
 
-  let rec unify ~sub ty0 ty1 =
-    let open Result.Let_syntax in
-    let ty0' = apply_type ~sub ty0 in
-    let ty1' = apply_type ~sub ty1 in
-    match ty0', ty1' with
-    | TVar tv, ty | ty, TVar tv -> add ~sub tv ty
-    | TCon c0, TCon c1 when Tau.equal_concrete c0 c1 -> Result.Ok sub
-    | TFun (ty_l0, ty_r0), TFun (ty_l1, ty_r1) ->
-      let%bind sub' = unify ~sub ty_l0 ty_l1 in
-      unify ~sub:sub' (apply_type ~sub:sub' ty_r0) (apply_type ~sub:sub' ty_r1)
-    | TProd tys, TProd tys' ->
-      (match
-         List.fold2
-           ~init:(Result.Ok sub)
-           ~f:(fun res_sub t'0 t'1 ->
-             let%bind sub = res_sub in
-             unify ~sub t'0 t'1)
-           tys
-           tys'
-       with
-       | List.Or_unequal_lengths.Ok x -> x
-       | List.Or_unequal_lengths.Unequal_lengths ->
-         Result.Error "Tuple arity must be the same")
-    | TApp (_tv, _tys), TApp (_tv', _tys') -> assert false (* TODO: implement *)
-    | _ -> assert false
-  ;;
-
   let compose sub sub' =
     Map.merge sub sub' ~f:(fun ~key:_ e ->
       match e with
       | `Left ty -> Option.Some ty
       | `Right ty -> Option.Some ty
       | `Both (_, ty) -> Option.Some ty)
+  ;;
+
+  let rec unify ty0 ty1 =
+    let open Result.Let_syntax in
+    match ty0, ty1 with
+    | Tau.TVar tv, ty | ty, Tau.TVar tv -> add ~sub:empty tv ty
+    | Tau.TCon c0, TCon c1 when Tau.equal_concrete c0 c1 -> Result.Ok empty
+    | Tau.TFun (ty_l0, ty_r0), TFun (ty_l1, ty_r1) ->
+      let%bind sub = unify ty_l0 ty_l1 in
+      let%map sub' = unify (apply_type ~sub ty_r0) (apply_type ~sub ty_r1) in
+      compose sub sub'
+    | Tau.TProd tys, Tau.TProd tys' ->
+      (match
+         List.fold2
+           ~init:(Result.Ok empty)
+           ~f:(fun res_sub t'0 t'1 ->
+             let%bind sub = res_sub in
+             let%map sub' = unify t'0 t'1 in
+             compose sub sub')
+           tys
+           tys'
+       with
+       | List.Or_unequal_lengths.Ok x -> x
+       | List.Or_unequal_lengths.Unequal_lengths ->
+         Result.Error "Tuple arity must be the same")
+    | Tau.TApp (_tv, _tys), Tau.TApp (_tv', _tys') -> assert false (* TODO: implement *)
+    | _ -> assert false
   ;;
 end
 
