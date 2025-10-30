@@ -41,6 +41,8 @@ module Scheme = struct
   let free_tvars = function
     | Forall (qs, ty) -> Set.diff (Set.of_list (module String) qs) (Tau.free_tvars ty)
   ;;
+
+  let of_type ty = Forall ([], ty)
 end
 
 module Gamma : sig
@@ -181,6 +183,23 @@ module W = struct
         | Tau.TCon _ -> ty
       in
       replace sub ty
+  ;;
+
+  let rec expr ctx e =
+    let open Result.Let_syntax in
+    match e with
+    | Ast.Id x ->
+      (match Gamma.lookup ctx.env x with
+       | Option.Some sc ->
+         let ty = instantiate ctx sc in
+         Result.Ok (Subst.empty, ty)
+       | Option.None -> Result.Error "Unbound variable")
+    | Ast.Lambda (x, e) ->
+      let ty = State.fresh ctx.state in
+      let ctx' = { ctx with env = Gamma.introduce ctx.env x (Scheme.of_type ty) } in
+      let%map sub, ty' = expr ctx' e in
+      sub, Subst.apply_type ~sub ty'
+    | _ -> assert false
   ;;
 end
 
