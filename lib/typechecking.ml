@@ -211,6 +211,14 @@ module W = struct
       let tyv = State.fresh ctx.state in
       let%map sub2 = Subst.unify (Subst.apply_type ~sub:sub1 tyf) (Tau.TFun (ty, tyv)) in
       Subst.compose (Subst.compose sub0 sub1) sub2, Subst.apply_type ~sub:sub2 tyv
+    | Ast.Binding (x, e0, e1) ->
+      let%bind s0, ty0 = expr ctx e0 in
+      let ctx' = { ctx with env = Subst.apply_gamma ~sub:s0 ctx.env } in
+      let sc = generalise ctx' ty0 in
+      let%map s1, ty1 = expr { ctx' with env = Gamma.introduce ctx.env x sc } e1 in
+      Subst.compose s0 s1, ty1
+    | Ast.Group e -> expr ctx e
+    | Ast.Int _ -> Result.Ok (Subst.empty, Tau.TCon Tau.Int)
     | _ -> assert false
   ;;
 end
