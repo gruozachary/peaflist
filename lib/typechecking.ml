@@ -149,8 +149,7 @@ module Subst = struct
        | List.Or_unequal_lengths.Ok x -> x
        | List.Or_unequal_lengths.Unequal_lengths ->
          Result.Error "Tuple arity must be the same")
-    | Tau.TApp (_tv, _tys), Tau.TApp (_tv', _tys') -> assert false (* TODO: implement *)
-    | _ -> assert false
+    | _ -> Result.Error "Type unification failed"
   ;;
 end
 
@@ -219,20 +218,9 @@ module W = struct
       Subst.compose s0 s1, ty1
     | Ast.Group e -> expr ctx e
     | Ast.Int _ -> Result.Ok (Subst.empty, Tau.TCon Tau.Int)
-    | _ -> assert false
+    | Ast.BinOp (_, _, _) -> Result.Error "Bin op typechecking not implemented"
+    | Ast.Match (_, _) -> Result.Error "Match typechecking not implemented"
+    | Ast.List _ -> Result.Error "List typechecking not implemented"
+    | Ast.Tuple _ -> Result.Error "Tuple typechecking not implemented"
   ;;
 end
-
-(* let rec typecheck_expr ~(ctx : ctx) (e : Ast.expr) : (tau, error) Result.t =
-  match e with
-  | Ast.Apply (_, _) -> _
-  | Ast.BinOp (_, _, _) -> _
-  | Ast.Binding (_, _, _) -> _
-  | Ast.Group e -> _
-  | Ast.Id x -> _
-  | Ast.Int _ -> _
-  | Ast.Lambda (_, _) -> _
-  | Ast.List _ -> _
-  | Ast.Match (_, _) -> _
-  | Ast.Tuple es -> _
-;;*)
