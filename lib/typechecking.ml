@@ -185,6 +185,12 @@ module W = struct
       replace sub ty
   ;;
 
+  let generalise ctx ty =
+    let env_tvs = Gamma.free_tvars ctx.env in
+    let ty_tvs = Tau.free_tvars ty in
+    Scheme.Forall (Set.diff ty_tvs env_tvs |> Set.to_list, ty)
+  ;;
+
   let rec expr ctx e =
     let open Result.Let_syntax in
     match e with
