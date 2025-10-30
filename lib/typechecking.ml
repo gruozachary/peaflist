@@ -199,6 +199,12 @@ module W = struct
       let ctx' = { ctx with env = Gamma.introduce ctx.env x (Scheme.of_type ty) } in
       let%map sub, ty' = expr ctx' e in
       sub, Subst.apply_type ~sub ty'
+    | Ast.Apply (ef, e) ->
+      let%bind sub0, tyf = expr ctx ef in
+      let%bind sub1, ty = expr { ctx with env = Subst.apply_gamma ~sub:sub0 ctx.env } e in
+      let tyv = State.fresh ctx.state in
+      let%map sub2 = Subst.unify (Subst.apply_type ~sub:sub1 tyf) (Tau.TFun (ty, tyv)) in
+      Subst.compose (Subst.compose sub0 sub1) sub2, Subst.apply_type ~sub:sub2 tyv
     | _ -> assert false
   ;;
 end
