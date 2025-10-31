@@ -51,20 +51,24 @@ let symbol s =
 
 let id_char = letter <|> digit <|> char '_'
 
-let id : Ast.id t =
+let mk_id_parser p =
   lexeme
     (attempt
-       (let%bind first = letter in
+       (let%bind first = p in
         let%bind rest = many id_char in
-        let x = String.of_char_list (first :: rest) in
+        let x = first ^ String.of_char_list rest in
         if Set.mem keywords x then fail else return x))
 ;;
 
-let ty_var : Ast.ty_var t =
-  lexeme (char '\'' >>| List.cons <*> many id_char >>| String.of_char_list)
+let lowercase_id = mk_id_parser (lowercase >>| String.of_char)
+
+let dash_id =
+  mk_id_parser
+    (let%map first = char '\'' >*> letter in
+     "\'" ^ String.of_char first)
 ;;
 
-let ty_id : Ast.ty_id t = ty_var <|> id
+let ty_id = dash_id <|> lowercase_id
 
 let keyword (s : string) : unit t = lexeme (string s >*> not_followed_by id_char)
 
@@ -75,7 +79,7 @@ let rec expr () = choice [ binding (); lambda (); matching (); append () ]
 
 and binding () =
   let%bind _ = attempt (keyword "let") in
-  let%bind x = id in
+  let%bind x = lowercase_id in
   let%bind _ = symbol "=" in
   let%bind e1 = expr () in
   let%bind _ = keyword "in" in
@@ -84,7 +88,7 @@ and binding () =
 
 and lambda () =
   let%bind _ = attempt (keyword "fun") in
-  let%bind x = id in
+  let%bind x = lowercase_id in
   let%bind _ = symbol "->" in
   let%map e = expr () in
   Expr.Lambda (x, e)
@@ -136,7 +140,7 @@ and atom () =
   choice
     [ (let%map x = int in
        Expr.Int x)
-    ; (let%map x = id in
+    ; (let%map x = lowercase_id in
        Expr.Id x)
     ; (let%map e = between ~l:(symbol "(") ~r:(symbol ")") (defer expr) in
        Expr.Group e)
@@ -153,7 +157,7 @@ and atom () =
 
 let val_decl =
   let%bind _ = keyword "vd" in
-  let%bind x = id in
+  let%bind x = lowercase_id in
   let%bind _ = symbol ":=" in
   let%map e = expr () in
   ValDecl (x, e)
@@ -197,14 +201,14 @@ and ty_app () =
 let type_decl =
   let%bind _ = keyword "td" in
   let%bind tvs =
-    between ~l:(symbol "(") ~r:(symbol ")") (sep_by ~sep:(symbol ",") ty_var)
+    between ~l:(symbol "(") ~r:(symbol ")") (sep_by ~sep:(symbol ",") dash_id)
   in
-  let%bind x = id in
+  let%bind x = lowercase_id in
   let%bind _ = symbol ":=" in
   let%map ts =
     some
       (let%bind _ = symbol "|" in
-       let%bind y = id in
+       let%bind y = lowercase_id in
        let%map t = option ~def:None (keyword "of" >*> ty () >>| fun t -> Some t) in
        y, t)
   in

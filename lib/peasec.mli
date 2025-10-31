@@ -98,6 +98,12 @@ val char : Base.char -> Base.char t
 (** A parser that consumes a letter *)
 val letter : Base.char t
 
+(** A parser that consumes a letter *)
+val lowercase : Base.char t
+
+(** A parser that consumes a letter *)
+val uppercase : Base.char t
+
 (** A parser that consumes a digit *)
 val digit : Base.char t
 

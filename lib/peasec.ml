@@ -183,6 +183,8 @@ let defer (f : unit -> 'a t) : 'a t =
 
 let char c = satisfy (equal_char c)
 let letter = satisfy Char.is_alpha
+let lowercase = satisfy Char.is_lowercase
+let uppercase = satisfy Char.is_uppercase
 let digit = satisfy Char.is_digit
 
 (* whitespace stuff *)
