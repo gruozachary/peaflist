@@ -64,8 +64,9 @@ vd length := fun l ->
               ( "l"
               , Expr.Match
                   ( Expr.Id "l"
-                  , [ Expr.Id "Nil", Expr.Int 0
-                    ; ( Expr.Apply (Expr.Apply (Expr.Id "Cons", Expr.Id "x"), Expr.Id "xs")
+                  , [ Expr.Constr "Nil", Expr.Int 0
+                    ; ( Expr.Apply
+                          (Expr.Apply (Expr.Constr "Cons", Expr.Id "x"), Expr.Id "xs")
                       , Expr.BinOp
                           ( Expr.Int 1
                           , Expr.Bin_op.Plus

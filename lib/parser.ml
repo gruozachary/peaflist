@@ -61,6 +61,7 @@ let mk_id_parser p =
 ;;
 
 let lowercase_id = mk_id_parser (lowercase >>| String.of_char)
+let uppercase_id = mk_id_parser (uppercase >>| String.of_char)
 
 let dash_id =
   mk_id_parser
@@ -142,6 +143,8 @@ and atom () =
        Expr.Int x)
     ; (let%map x = lowercase_id in
        Expr.Id x)
+    ; (let%map x = uppercase_id in
+       Expr.Constr x)
     ; (let%map e = between ~l:(symbol "(") ~r:(symbol ")") (defer expr) in
        Expr.Group e)
     ; (let%map es =
@@ -171,11 +174,6 @@ and ty_fun () =
     (let%map _ = symbol "->" in
      fun lt rt -> Ty.Fun (lt, rt))
 
-(*and ty_prod () =
-  chain_right_1
-    (ty_app ())
-    (let%map _ = symbol "*" in
-     fun lt rt -> Ast.TyProd (lt, rt)) *)
 and ty_prod () =
   match%map sep_by_1 ~sep:(symbol "*") (ty_app ()) with
   | [ x ] -> x
@@ -208,7 +206,7 @@ let type_decl =
   let%map ts =
     some
       (let%bind _ = symbol "|" in
-       let%bind y = lowercase_id in
+       let%bind y = uppercase_id in
        let%map t = option ~def:None (keyword "of" >*> ty () >>| fun t -> Some t) in
        y, t)
   in

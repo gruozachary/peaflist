@@ -19,6 +19,7 @@ module Expr = struct
   type t =
     | Int of int
     | Id of id
+    | Constr of id
     | Apply of t * t
     | Group of t
     | Lambda of id * t
