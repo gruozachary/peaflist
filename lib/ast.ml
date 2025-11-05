@@ -5,6 +5,15 @@ type id = string [@@deriving eq]
 type ty_id = string [@@deriving eq]
 type ty_var = string [@@deriving eq]
 
+module Pat = struct
+  type t =
+    | Int of int
+    | Ident of id
+    | Tuple of t list
+    | CtorApp of id * t Option.t
+  [@@deriving eq]
+end
+
 module Expr = struct
   module Bin_op = struct
     type t =

@@ -16,9 +16,14 @@
               | "(" ( Expr ( "," Expr)* )? ")"              tuple/group
               | "fun" Id "->" Expr                          lamda
               | "let" Id "=" Expr "in" Expr                 binding
-              | "match" Expr "with" ("|" Expr "->" Expr)+   match
+              | "match" Expr "with" ("|" Pattern "->" Expr)+   match
               | Expr BinOp Expr
               ;
+
+  Pattern   ::= Int                                       basic constant
+              | LowerId                                   variable
+              | "(" ( Pattern ( "," Pattern)* )? ")"      tuple/group
+              | UpperId Pattern?                          constructor application
 
   BinOp     ::= "+" | "-" | "*" | "/" | "++" ;
 
