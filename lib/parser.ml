@@ -156,15 +156,14 @@ end = struct
          Expr.Id x)
       ; (let%map x = Ident.upper in
          Expr.Constr x)
-      ; (let%map e = between ~l:(symbol "(") ~r:(symbol ")") (defer parse) in
-         Expr.Group e)
-      ; (let%map es =
+      ; (match%map
            between
-             ~l:(symbol "{")
-             ~r:(symbol "}")
+             ~l:(symbol "(")
+             ~r:(symbol ")")
              (sep_by_1 ~sep:(symbol ",") (defer parse))
-         in
-         Expr.Tuple es)
+         with
+         | [ e ] -> Expr.Group e
+         | es -> Expr.Tuple es)
       ]
   ;;
 end

@@ -13,11 +13,10 @@
               | LowerId                                     normal identifier
               | UpperId                                     constructor
               | Expr Expr                                   function application
-              | "(" Expr ")"                                group
+              | "(" ( Expr ( "," Expr)* )? ")"              tuple/group
               | "fun" Id "->" Expr                          lamda
               | "let" Id "=" Expr "in" Expr                 binding
               | "match" Expr "with" ("|" Expr "->" Expr)+   match
-              | "{" ( Expr ( "," Expr)* )? "}"              tuple
               | Expr BinOp Expr
               ;
 

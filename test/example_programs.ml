@@ -48,8 +48,8 @@ td ('a) list :=
 
 vd length := fun l ->
   match l with
-    | Nil       -> 0
-    | Cons x xs -> 1 + length xs
+    | Nil         -> 0
+    | Cons (x, xs) -> 1 + length xs
 |}
   ; ast =
       [ TypeDecl
@@ -66,7 +66,7 @@ vd length := fun l ->
                   ( Expr.Id "l"
                   , [ Expr.Constr "Nil", Expr.Int 0
                     ; ( Expr.Apply
-                          (Expr.Apply (Expr.Constr "Cons", Expr.Id "x"), Expr.Id "xs")
+                          (Expr.Constr "Cons", Expr.Tuple [ Expr.Id "x"; Expr.Id "xs" ])
                       , Expr.BinOp
                           ( Expr.Int 1
                           , Expr.Bin_op.Plus
