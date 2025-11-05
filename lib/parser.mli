@@ -10,7 +10,8 @@
   AppType   ::= ( "(" Type ( "," Type )* ")" Tid | TId ) TId*
 
   Expr      ::= Int
-              | Id
+              | LowerId                                     normal identifier
+              | UpperId                                     constructor
               | Expr Expr                                   function application
               | "(" Expr ")"                                group
               | "fun" Id "->" Expr                          lamda
@@ -28,10 +29,15 @@
   Int       ::= Digit+ ;
   Digit     ::= "0" | ... | "9" ;
 
-  Id        ::= Letter (Letter | Digit | "_")* ;
-  TVar      ::= "'" Id
-  TId       ::= Id | TVar
-  Letter    ::= "a" | ... "z" | "A" | ... | "Z" ;
+  LowerId   ::= Lowercase (Letter | Digit | "_")* ;
+  UpperId   ::= Uppercase (Letter | Digit | "_")* ;
+  DashId    ::= "'" Letter (Letter | Digit | "_")* ;
+
+  TypeId    ::= LowerId | DashId
+
+  Letter    ::= Lowercase | Uppercase ;
+  Lowercase ::= "a" | ... "z" ;
+  Uppercase ::= "A" | ... "Z" ;
 *)
 
 val prog : Ast.decl list Peasec.t
