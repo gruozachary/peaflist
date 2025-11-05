@@ -76,120 +76,134 @@ let keyword (s : string) : unit t = lexeme (string s >*> not_followed_by id_char
 (* TODO: this will result on a horrible disaster if there are too many digits *)
 and int : Ast.int t = lexeme (some digit >>| String.of_char_list >>| Int.of_string)
 
-let rec expr () = choice [ binding (); lambda (); matching (); append () ]
+module Expression : sig
+  val parse : unit -> Expr.t t
+end = struct
+  let rec parse () = choice [ binding (); lambda (); matching (); append () ]
 
-and binding () =
-  let%bind _ = attempt (keyword "let") in
-  let%bind x = lowercase_id in
-  let%bind _ = symbol "=" in
-  let%bind e1 = expr () in
-  let%bind _ = keyword "in" in
-  let%map e2 = expr () in
-  Expr.Binding (x, e1, e2)
+  and binding () =
+    let%bind _ = attempt (keyword "let") in
+    let%bind x = lowercase_id in
+    let%bind _ = symbol "=" in
+    let%bind e1 = parse () in
+    let%bind _ = keyword "in" in
+    let%map e2 = parse () in
+    Expr.Binding (x, e1, e2)
 
-and lambda () =
-  let%bind _ = attempt (keyword "fun") in
-  let%bind x = lowercase_id in
-  let%bind _ = symbol "->" in
-  let%map e = expr () in
-  Expr.Lambda (x, e)
+  and lambda () =
+    let%bind _ = attempt (keyword "fun") in
+    let%bind x = lowercase_id in
+    let%bind _ = symbol "->" in
+    let%map e = parse () in
+    Expr.Lambda (x, e)
 
-and matching () =
-  let%bind _ = attempt (keyword "match") in
-  let%bind e = expr () in
-  let%bind _ = keyword "with" in
-  let%map es =
-    some
-      (let%bind e'1 = symbol "|" >*> expr () in
-       let%map e'2 = symbol "->" >*> expr () in
-       e'1, e'2)
-  in
-  Expr.Match (e, es)
+  and matching () =
+    let%bind _ = attempt (keyword "match") in
+    let%bind e = parse () in
+    let%bind _ = keyword "with" in
+    let%map es =
+      some
+        (let%bind e'1 = symbol "|" >*> parse () in
+         let%map e'2 = symbol "->" >*> parse () in
+         e'1, e'2)
+    in
+    Expr.Match (e, es)
 
-and append () =
-  chain_right_1
-    (add ())
-    (let%map _ = symbol "++" in
-     fun l r -> Expr.BinOp (l, Expr.Bin_op.Append, r))
+  and append () =
+    chain_right_1
+      (add ())
+      (let%map _ = symbol "++" in
+       fun l r -> Expr.BinOp (l, Expr.Bin_op.Append, r))
 
-and add () =
-  chain_left_1
-    (mul ())
-    (let%map x = symbol "+" <|> symbol "-" in
-     fun l r ->
-       match x with
-       | "+" -> Expr.BinOp (l, Expr.Bin_op.Plus, r)
-       | "-" -> Expr.BinOp (l, Expr.Bin_op.Sub, r)
-       | _ -> assert false)
+  and add () =
+    chain_left_1
+      (mul ())
+      (let%map x = symbol "+" <|> symbol "-" in
+       fun l r ->
+         match x with
+         | "+" -> Expr.BinOp (l, Expr.Bin_op.Plus, r)
+         | "-" -> Expr.BinOp (l, Expr.Bin_op.Sub, r)
+         | _ -> assert false)
 
-and mul () =
-  chain_left_1
-    (apply ())
-    (let%map x = symbol "*" <|> symbol "/" in
-     fun l r ->
-       match x with
-       | "*" -> Expr.BinOp (l, Expr.Bin_op.Mul, r)
-       | "/" -> Expr.BinOp (l, Expr.Bin_op.Div, r)
-       | _ -> assert false)
+  and mul () =
+    chain_left_1
+      (apply ())
+      (let%map x = symbol "*" <|> symbol "/" in
+       fun l r ->
+         match x with
+         | "*" -> Expr.BinOp (l, Expr.Bin_op.Mul, r)
+         | "/" -> Expr.BinOp (l, Expr.Bin_op.Div, r)
+         | _ -> assert false)
 
-and apply () =
-  let%bind x = atom () in
-  let%map xs = many (atom ()) in
-  List.fold ~init:x ~f:(fun f x -> Expr.Apply (f, x)) xs
+  and apply () =
+    let%bind x = atom () in
+    let%map xs = many (atom ()) in
+    List.fold ~init:x ~f:(fun f x -> Expr.Apply (f, x)) xs
 
-and atom () =
-  choice
-    [ (let%map x = int in
-       Expr.Int x)
-    ; (let%map x = lowercase_id in
-       Expr.Id x)
-    ; (let%map x = uppercase_id in
-       Expr.Constr x)
-    ; (let%map e = between ~l:(symbol "(") ~r:(symbol ")") (defer expr) in
-       Expr.Group e)
-    ; (let%map es =
-         between ~l:(symbol "{") ~r:(symbol "}") (sep_by_1 ~sep:(symbol ",") (defer expr))
-       in
-       Expr.Tuple es)
-    ]
-;;
+  and atom () =
+    choice
+      [ (let%map x = int in
+         Expr.Int x)
+      ; (let%map x = lowercase_id in
+         Expr.Id x)
+      ; (let%map x = uppercase_id in
+         Expr.Constr x)
+      ; (let%map e = between ~l:(symbol "(") ~r:(symbol ")") (defer parse) in
+         Expr.Group e)
+      ; (let%map es =
+           between
+             ~l:(symbol "{")
+             ~r:(symbol "}")
+             (sep_by_1 ~sep:(symbol ",") (defer parse))
+         in
+         Expr.Tuple es)
+      ]
+  ;;
+end
+
+module Type : sig
+  val parse : unit -> Ty.t t
+end = struct
+  let rec parse () = ty_fun ()
+
+  and ty_fun () =
+    chain_right_1
+      (ty_prod ())
+      (let%map _ = symbol "->" in
+       fun lt rt -> Ty.Fun (lt, rt))
+
+  and ty_prod () =
+    match%map sep_by_1 ~sep:(symbol "*") (ty_app ()) with
+    | [ x ] -> x
+    | xs -> Ty.Prod xs
+
+  and ty_app () =
+    let%bind head =
+      (match%bind
+         between
+           ~l:(symbol "(")
+           ~r:(symbol ")")
+           (sep_by_1 ~sep:(symbol ",") (defer parse))
+       with
+       | [ x ] -> return x
+       | xs ->
+         let%map tid = ty_id in
+         Ty.App (tid, xs))
+      <|>
+      let%map x = ty_id in
+      Ty.Id x
+    in
+    let%map rest = many ty_id in
+    List.fold ~init:head ~f:(fun acc t -> Ty.App (t, [ acc ])) rest
+  ;;
+end
 
 let val_decl =
   let%bind _ = keyword "vd" in
   let%bind x = lowercase_id in
   let%bind _ = symbol ":=" in
-  let%map e = expr () in
+  let%map e = Expression.parse () in
   ValDecl (x, e)
-;;
-
-let rec ty () = ty_fun ()
-
-and ty_fun () =
-  chain_right_1
-    (ty_prod ())
-    (let%map _ = symbol "->" in
-     fun lt rt -> Ty.Fun (lt, rt))
-
-and ty_prod () =
-  match%map sep_by_1 ~sep:(symbol "*") (ty_app ()) with
-  | [ x ] -> x
-  | xs -> Ty.Prod xs
-
-and ty_app () =
-  let%bind head =
-    (match%bind
-       between ~l:(symbol "(") ~r:(symbol ")") (sep_by_1 ~sep:(symbol ",") (defer ty))
-     with
-     | [ x ] -> return x
-     | xs ->
-       let%map tid = ty_id in
-       Ty.App (tid, xs))
-    <|>
-    let%map x = ty_id in
-    Ty.Id x
-  in
-  let%map rest = many ty_id in
-  List.fold ~init:head ~f:(fun acc t -> Ty.App (t, [ acc ])) rest
 ;;
 
 let type_decl =
@@ -203,7 +217,9 @@ let type_decl =
     some
       (let%bind _ = symbol "|" in
        let%bind y = uppercase_id in
-       let%map t = option ~def:None (keyword "of" >*> ty () >>| fun t -> Some t) in
+       let%map t =
+         option ~def:None (keyword "of" >*> Type.parse () >>| fun t -> Some t)
+       in
        y, t)
   in
   Ast.TypeDecl (x, tvs, ts)
