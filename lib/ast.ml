@@ -33,7 +33,7 @@ module Expr = struct
     | Group of t
     | Lambda of id * t
     | Binding of id * t * t
-    | Match of t * (t * t) list
+    | Match of t * (Pat.t * t) list
     | Tuple of t list
     | BinOp of t * Bin_op.t * t
   [@@deriving eq]

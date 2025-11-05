@@ -171,6 +171,8 @@ let option (p : 'a t) ~(def : 'a) : 'a t =
   }
 ;;
 
+let option_opt p = option ~def:None (p >>| fun p' -> Some p')
+
 let defer (f : unit -> 'a t) : 'a t =
   { unparser = (fun inp cok eok cerr eerr -> (f ()).unparser inp cok eok cerr eerr) }
 ;;

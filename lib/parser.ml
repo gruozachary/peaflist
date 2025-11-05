@@ -83,6 +83,26 @@ let keyword (s : string) : unit t = lexeme (string s >*> not_followed_by Ident.c
 
 (* TODO: this will result on a horrible disaster if there are too many digits *)
 let int : Ast.int t = lexeme (some digit >>| String.of_char_list >>| Int.of_string)
+let tuple p = between ~l:(symbol "(") ~r:(symbol ")") (sep_by ~sep:(symbol ",") p)
+let tuple_1 p = between ~l:(symbol "(") ~r:(symbol ")") (sep_by_1 ~sep:(symbol ",") p)
+
+module Pattern : sig
+  val parse : unit -> Pat.t t
+end = struct
+  let rec parse () =
+    choice
+      [ (let%map x = int in
+         Pat.Int x)
+      ; (let%map x = Ident.lower in
+         Pat.Ident x)
+      ; (let%bind x = Ident.upper in
+         let%map p_opt = option_opt (defer parse) in
+         Pat.CtorApp (x, p_opt))
+      ; (let%map ps = tuple_1 (defer parse) in
+         Pat.Tuple ps)
+      ]
+  ;;
+end
 
 module Expression : sig
   val parse : unit -> Expr.t t
@@ -111,9 +131,9 @@ end = struct
     let%bind _ = keyword "with" in
     let%map es =
       some
-        (let%bind e'1 = symbol "|" >*> parse () in
-         let%map e'2 = symbol "->" >*> parse () in
-         e'1, e'2)
+        (let%bind p = symbol "|" >*> Pattern.parse () in
+         let%map e' = symbol "->" >*> parse () in
+         p, e')
     in
     Expr.Match (e, es)
 
@@ -156,12 +176,7 @@ end = struct
          Expr.Id x)
       ; (let%map x = Ident.upper in
          Expr.Constr x)
-      ; (match%map
-           between
-             ~l:(symbol "(")
-             ~r:(symbol ")")
-             (sep_by_1 ~sep:(symbol ",") (defer parse))
-         with
+      ; (match%map tuple_1 (defer parse) with
          | [ e ] -> Expr.Group e
          | es -> Expr.Tuple es)
       ]
@@ -186,12 +201,7 @@ end = struct
 
   and ty_app () =
     let%bind head =
-      (match%bind
-         between
-           ~l:(symbol "(")
-           ~r:(symbol ")")
-           (sep_by_1 ~sep:(symbol ",") (defer parse))
-       with
+      (match%bind tuple_1 (defer parse) with
        | [ x ] -> return x
        | xs ->
          let%map tid = Ident.ty in
@@ -215,9 +225,7 @@ let val_decl =
 
 let type_decl =
   let%bind _ = keyword "td" in
-  let%bind tvs =
-    between ~l:(symbol "(") ~r:(symbol ")") (sep_by ~sep:(symbol ",") Ident.dash)
-  in
+  let%bind tvs = tuple Ident.dash in
   let%bind x = Ident.lower in
   let%bind _ = symbol ":=" in
   let%map ts =
