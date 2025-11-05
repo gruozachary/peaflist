@@ -49,32 +49,40 @@ let symbol s =
   lexeme (attempt (go (string s) s))
 ;;
 
-let id_char = letter <|> digit <|> char '_'
+module Ident : sig
+  val lower : string t
+  val upper : string t
+  val dash : string t
+  val ty : string t
+  val char : char t
+end = struct
+  let char = letter <|> digit <|> Peasec.char '_'
 
-let mk_id_parser p =
-  lexeme
-    (attempt
-       (let%bind first = p in
-        let%bind rest = many id_char in
-        let x = first ^ String.of_char_list rest in
-        if Set.mem keywords x then fail else return x))
-;;
+  let mk_id_parser p =
+    lexeme
+      (attempt
+         (let%bind first = p in
+          let%bind rest = many char in
+          let x = first ^ String.of_char_list rest in
+          if Set.mem keywords x then fail else return x))
+  ;;
 
-let lowercase_id = mk_id_parser (lowercase >>| String.of_char)
-let uppercase_id = mk_id_parser (uppercase >>| String.of_char)
+  let lower = mk_id_parser (lowercase >>| String.of_char)
+  let upper = mk_id_parser (uppercase >>| String.of_char)
 
-let dash_id =
-  mk_id_parser
-    (let%map first = char '\'' >*> letter in
-     "\'" ^ String.of_char first)
-;;
+  let dash =
+    mk_id_parser
+      (let%map first = Peasec.char '\'' >*> letter in
+       "\'" ^ String.of_char first)
+  ;;
 
-let ty_id = dash_id <|> lowercase_id
+  let ty = dash <|> lower
+end
 
-let keyword (s : string) : unit t = lexeme (string s >*> not_followed_by id_char)
+let keyword (s : string) : unit t = lexeme (string s >*> not_followed_by Ident.char)
 
 (* TODO: this will result on a horrible disaster if there are too many digits *)
-and int : Ast.int t = lexeme (some digit >>| String.of_char_list >>| Int.of_string)
+let int : Ast.int t = lexeme (some digit >>| String.of_char_list >>| Int.of_string)
 
 module Expression : sig
   val parse : unit -> Expr.t t
@@ -83,7 +91,7 @@ end = struct
 
   and binding () =
     let%bind _ = attempt (keyword "let") in
-    let%bind x = lowercase_id in
+    let%bind x = Ident.lower in
     let%bind _ = symbol "=" in
     let%bind e1 = parse () in
     let%bind _ = keyword "in" in
@@ -92,7 +100,7 @@ end = struct
 
   and lambda () =
     let%bind _ = attempt (keyword "fun") in
-    let%bind x = lowercase_id in
+    let%bind x = Ident.lower in
     let%bind _ = symbol "->" in
     let%map e = parse () in
     Expr.Lambda (x, e)
@@ -144,9 +152,9 @@ end = struct
     choice
       [ (let%map x = int in
          Expr.Int x)
-      ; (let%map x = lowercase_id in
+      ; (let%map x = Ident.lower in
          Expr.Id x)
-      ; (let%map x = uppercase_id in
+      ; (let%map x = Ident.upper in
          Expr.Constr x)
       ; (let%map e = between ~l:(symbol "(") ~r:(symbol ")") (defer parse) in
          Expr.Group e)
@@ -187,20 +195,20 @@ end = struct
        with
        | [ x ] -> return x
        | xs ->
-         let%map tid = ty_id in
+         let%map tid = Ident.ty in
          Ty.App (tid, xs))
       <|>
-      let%map x = ty_id in
+      let%map x = Ident.ty in
       Ty.Id x
     in
-    let%map rest = many ty_id in
+    let%map rest = many Ident.ty in
     List.fold ~init:head ~f:(fun acc t -> Ty.App (t, [ acc ])) rest
   ;;
 end
 
 let val_decl =
   let%bind _ = keyword "vd" in
-  let%bind x = lowercase_id in
+  let%bind x = Ident.lower in
   let%bind _ = symbol ":=" in
   let%map e = Expression.parse () in
   ValDecl (x, e)
@@ -209,14 +217,14 @@ let val_decl =
 let type_decl =
   let%bind _ = keyword "td" in
   let%bind tvs =
-    between ~l:(symbol "(") ~r:(symbol ")") (sep_by ~sep:(symbol ",") dash_id)
+    between ~l:(symbol "(") ~r:(symbol ")") (sep_by ~sep:(symbol ",") Ident.dash)
   in
-  let%bind x = lowercase_id in
+  let%bind x = Ident.lower in
   let%bind _ = symbol ":=" in
   let%map ts =
     some
       (let%bind _ = symbol "|" in
-       let%bind y = uppercase_id in
+       let%bind y = Ident.upper in
        let%map t =
          option ~def:None (keyword "of" >*> Type.parse () >>| fun t -> Some t)
        in
