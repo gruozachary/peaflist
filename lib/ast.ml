@@ -25,7 +25,6 @@ module Expr = struct
     | Lambda of id * t
     | Binding of id * t * t
     | Match of t * (t * t) list
-    | List of t list
     | Tuple of t list
     | BinOp of t * Bin_op.t * t
   [@@deriving eq]

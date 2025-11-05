@@ -18,11 +18,8 @@
               | "let" Id "=" Expr "in" Expr                 binding
               | "match" Expr "with" ("|" Expr "->" Expr)+   match
               | "{" ( Expr ( "," Expr)* )? "}"              tuple
-              | "[" ListElems? "]"
               | Expr BinOp Expr
               ;
-
-  ListElems ::= Expr ("," Expr)* ;
 
   BinOp     ::= "+" | "-" | "*" | "/" | "++" ;
 

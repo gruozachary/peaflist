@@ -148,10 +148,6 @@ and atom () =
     ; (let%map e = between ~l:(symbol "(") ~r:(symbol ")") (defer expr) in
        Expr.Group e)
     ; (let%map es =
-         between ~l:(symbol "[") ~r:(symbol "]") (sep_by_1 ~sep:(symbol ",") (defer expr))
-       in
-       Expr.List es)
-    ; (let%map es =
          between ~l:(symbol "{") ~r:(symbol "}") (sep_by_1 ~sep:(symbol ",") (defer expr))
        in
        Expr.Tuple es)
