@@ -1,4 +1,5 @@
 open! Base
+open Ast
 
 type alpha = string
 
@@ -193,34 +194,39 @@ module W = struct
   let rec expr ctx e =
     let open Result.Let_syntax in
     match e with
-    | Ast.Id x ->
+    | Expr.Id x ->
       (match Gamma.lookup ctx.env x with
        | Option.Some sc ->
          let ty = instantiate ctx sc in
          Result.Ok (Subst.empty, ty)
        | Option.None -> Result.Error "Unbound variable")
-    | Ast.Lambda (x, e) ->
+    | Expr.Constr x ->
+      (match Gamma.lookup ctx.env x with
+       | Option.Some sc ->
+         let ty = instantiate ctx sc in
+         Result.Ok (Subst.empty, ty)
+       | Option.None -> Result.Error "Unbound constructor")
+    | Expr.Lambda (x, e) ->
       let ty = State.fresh ctx.state in
       let ctx' = { ctx with env = Gamma.introduce ctx.env x (Scheme.of_type ty) } in
       let%map sub, ty' = expr ctx' e in
       sub, Subst.apply_type ~sub ty'
-    | Ast.Apply (ef, e) ->
+    | Expr.Apply (ef, e) ->
       let%bind sub0, tyf = expr ctx ef in
       let%bind sub1, ty = expr { ctx with env = Subst.apply_gamma ~sub:sub0 ctx.env } e in
       let tyv = State.fresh ctx.state in
       let%map sub2 = Subst.unify (Subst.apply_type ~sub:sub1 tyf) (Tau.TFun (ty, tyv)) in
       Subst.compose (Subst.compose sub0 sub1) sub2, Subst.apply_type ~sub:sub2 tyv
-    | Ast.Binding (x, e0, e1) ->
+    | Expr.Binding (x, e0, e1) ->
       let%bind s0, ty0 = expr ctx e0 in
       let ctx' = { ctx with env = Subst.apply_gamma ~sub:s0 ctx.env } in
       let sc = generalise ctx' ty0 in
       let%map s1, ty1 = expr { ctx' with env = Gamma.introduce ctx.env x sc } e1 in
       Subst.compose s0 s1, ty1
-    | Ast.Group e -> expr ctx e
-    | Ast.Int _ -> Result.Ok (Subst.empty, Tau.TCon Tau.Int)
-    | Ast.BinOp (_, _, _) -> Result.Error "Bin op typechecking not implemented"
-    | Ast.Match (_, _) -> Result.Error "Match typechecking not implemented"
-    | Ast.List _ -> Result.Error "List typechecking not implemented"
-    | Ast.Tuple _ -> Result.Error "Tuple typechecking not implemented"
+    | Expr.Group e -> expr ctx e
+    | Expr.Int _ -> Result.Ok (Subst.empty, Tau.TCon Tau.Int)
+    | Expr.BinOp (_, _, _) -> Result.Error "Bin op typechecking not implemented"
+    | Expr.Match (_, _) -> Result.Error "Match typechecking not implemented"
+    | Expr.Tuple _ -> Result.Error "Tuple typechecking not implemented"
   ;;
 end

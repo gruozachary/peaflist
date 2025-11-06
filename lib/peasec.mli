@@ -65,6 +65,9 @@ val eof : unit t
 (** A parser that attempts to run or returns a default value *)
 val option : 'a t -> def:'a -> 'a t
 
+(** A parser that attempts to run or returns none *)
+val option_opt : 'a t -> 'a Option.t t
+
 (** Stops eager evaluation when building the parser *)
 val defer : (unit -> 'a t) -> 'a t
 
@@ -97,6 +100,12 @@ val char : Base.char -> Base.char t
 
 (** A parser that consumes a letter *)
 val letter : Base.char t
+
+(** A parser that consumes a letter *)
+val lowercase : Base.char t
+
+(** A parser that consumes a letter *)
+val uppercase : Base.char t
 
 (** A parser that consumes a digit *)
 val digit : Base.char t

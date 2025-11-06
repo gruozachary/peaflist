@@ -171,6 +171,8 @@ let option (p : 'a t) ~(def : 'a) : 'a t =
   }
 ;;
 
+let option_opt p = option ~def:None (p >>| fun p' -> Some p')
+
 let defer (f : unit -> 'a t) : 'a t =
   { unparser = (fun inp cok eok cerr eerr -> (f ()).unparser inp cok eok cerr eerr) }
 ;;
@@ -183,6 +185,8 @@ let defer (f : unit -> 'a t) : 'a t =
 
 let char c = satisfy (equal_char c)
 let letter = satisfy Char.is_alpha
+let lowercase = satisfy Char.is_lowercase
+let uppercase = satisfy Char.is_uppercase
 let digit = satisfy Char.is_digit
 
 (* whitespace stuff *)
