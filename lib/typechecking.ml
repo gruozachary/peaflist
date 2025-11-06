@@ -4,25 +4,18 @@ open Ast
 type alpha = string
 
 module Tau = struct
-  type concrete =
-    | Int
-    | Unit
-  [@@deriving eq]
-
   type t =
     | TVar of alpha
     | TFun of t * t
     | TProd of t list
-    | TApp of alpha * t list
-    | TCon of concrete
+    | TCon of alpha * t list
 
   let rec free_tvars = function
     | TVar tvar -> Set.of_list (module String) [ tvar ]
     | TFun (t0, t1) -> Set.union (free_tvars t0) (free_tvars t1)
     | TProd ts -> Set.union_list (module String) (List.map ~f:(fun t -> free_tvars t) ts)
-    | TApp (_, ts) ->
+    | TCon (_, ts) ->
       Set.union_list (module String) (List.map ~f:(fun t -> free_tvars t) ts)
-    | TCon _ -> Set.empty (module String)
   ;;
 
   let rec occurs tvar t : bool =
@@ -30,8 +23,7 @@ module Tau = struct
     | TVar x -> equal_string x tvar
     | TFun (t'0, t'1) -> occurs tvar t'0 || occurs tvar t'1
     | TProd ts -> List.exists ~f:(occurs tvar) ts
-    | TApp (tvar', ts) -> equal_string tvar tvar' || List.exists ~f:(occurs tvar) ts
-    | TCon _ -> false
+    | TCon (tvar', ts) -> equal_string tvar tvar' || List.exists ~f:(occurs tvar) ts
   ;;
 end
 
@@ -113,8 +105,7 @@ module Subst = struct
        | None -> ty)
     | Tau.TFun (ty0, ty1) -> TFun (apply_type ~sub ty0, apply_type ~sub ty1)
     | Tau.TProd tys -> TProd (List.map tys ~f:(apply_type ~sub))
-    | Tau.TApp (tvar, tys) -> TApp (tvar, List.map tys ~f:(apply_type ~sub))
-    | Tau.TCon _ -> ty
+    | Tau.TCon (tvar, tys) -> TCon (tvar, List.map tys ~f:(apply_type ~sub))
 
   and apply_scheme ~sub sc =
     let (Scheme.Forall (qs, ty)) = sc in
@@ -147,7 +138,6 @@ module Subst = struct
     let open Result.Let_syntax in
     match ty0, ty1 with
     | Tau.TVar tv, ty | ty, Tau.TVar tv -> add ~sub:empty tv ty
-    | Tau.TCon c0, TCon c1 when Tau.equal_concrete c0 c1 -> Result.Ok empty
     | Tau.TFun (ty_l0, ty_r0), TFun (ty_l1, ty_r1) ->
       let%bind sub = unify ty_l0 ty_l1 in
       let%map sub' = unify (apply_type ~sub ty_r0) (apply_type ~sub ty_r1) in
@@ -194,8 +184,7 @@ module W = struct
            | None -> ty)
         | Tau.TFun (ty0, ty1) -> TFun (replace sub ty0, replace sub ty1)
         | Tau.TProd tys -> TProd (List.map tys ~f:(replace sub))
-        | Tau.TApp (tvar, tys) -> TApp (tvar, List.map tys ~f:(replace sub))
-        | Tau.TCon _ -> ty
+        | Tau.TCon (tvar, tys) -> TCon (tvar, List.map tys ~f:(replace sub))
       in
       replace sub ty
   ;;
@@ -239,7 +228,7 @@ module W = struct
       let%map s1, ty1 = expr { ctx' with env = Gamma.introduce ctx.env x sc } e1 in
       Subst.compose s0 s1, ty1
     | Expr.Group e -> expr ctx e
-    | Expr.Int _ -> Result.Ok (Subst.empty, Tau.TCon Tau.Int)
+    | Expr.Int _ -> Result.Ok (Subst.empty, Tau.TCon ("int", []))
     | Expr.BinOp (_, _, _) -> Result.Error "Bin op typechecking not implemented"
     | Expr.Match (_, _) -> Result.Error "Match typechecking not implemented"
     | Expr.Tuple _ -> Result.Error "Tuple typechecking not implemented"
