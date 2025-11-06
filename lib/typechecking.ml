@@ -70,6 +70,22 @@ end = struct
   ;;
 end
 
+module TyEnv : sig
+  type t
+  type arity = int
+
+  val empty : t
+  val introduce : t -> alpha -> arity -> t
+  val lookup : t -> alpha -> arity Option.t
+end = struct
+  type arity = int
+  type t = (alpha, arity, String.comparator_witness) Map.t
+
+  let empty : t = Map.empty (module String)
+  let introduce env tid sc = Map.set env ~key:tid ~data:sc
+  let lookup env tid = Map.find env tid
+end
+
 module State = struct
   type t = { mutable next : int }
 
@@ -159,7 +175,6 @@ type error = string
 type ctx =
   { env : Gamma.t
   ; state : State.t
-  ; subst : Subst.t
   }
 
 module W = struct
@@ -230,3 +245,12 @@ module W = struct
     | Expr.Tuple _ -> Result.Error "Tuple typechecking not implemented"
   ;;
 end
+
+let typecheck =
+  let rec go ctx = function
+    | ValDecl _ :: ds -> go ctx ds
+    | TypeDecl _ :: ds -> go ctx ds
+    | [] -> Result.Ok ()
+  in
+  go { env = Gamma.empty; state = State.create () }
+;;
