@@ -119,11 +119,11 @@ module Subst = struct
     | Tau.TVar tv' ->
       if equal_string tv tv'
       then Result.Ok sub
-      else Result.Ok (Map.add_exn sub ~key:tv ~data:ty)
+      else Result.Ok (Map.set sub ~key:tv ~data:ty)
     | _ ->
       if Tau.occurs tv ty
       then Result.Error "Recursive type variable definiton"
-      else Result.Ok (Map.add_exn sub ~key:tv ~data:ty)
+      else Result.Ok (Map.set sub ~key:tv ~data:ty)
   ;;
 
   let compose sub sub' =
