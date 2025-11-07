@@ -25,6 +25,13 @@ module Tau = struct
     | TProd ts -> List.exists ~f:(occurs tvar) ts
     | TCon (tvar', ts) -> equal_string tvar tvar' || List.exists ~f:(occurs tvar) ts
   ;;
+
+  let rec of_ty ~vm = function
+    | Ty.Id x -> TVar (Option.value (Map.find vm x) ~default:x)
+    | Ty.Fun (t, t') -> TFun (of_ty ~vm t, of_ty ~vm t')
+    | Ty.Prod ts -> TProd (List.map ~f:(of_ty ~vm) ts)
+    | Ty.App (x, ts) -> TCon (x, List.map ~f:(of_ty ~vm) ts)
+  ;;
 end
 
 (*TODO: consider changing this to set*)
@@ -164,6 +171,7 @@ type error = string
 
 type ctx =
   { env : Gamma.t
+  ; tenv : TyEnv.t
   ; state : State.t
   }
 
@@ -238,8 +246,42 @@ end
 let typecheck =
   let rec go ctx = function
     | ValDecl _ :: ds -> go ctx ds
-    | TypeDecl _ :: ds -> go ctx ds
+    | TypeDecl (x, utvs, ctors) :: ds ->
+      let open Result.Let_syntax in
+      let arity = List.length utvs in
+      let get_tvs () =
+        match
+          Map.of_alist
+            (module String)
+            (List.map ~f:(fun tv -> tv, State.fresh_tv ctx.state) utvs)
+        with
+        | `Ok x -> Result.Ok x
+        | `Duplicate_key _ -> Result.Error "Duplicate type variable"
+      in
+      let ctx' = { ctx with tenv = TyEnv.introduce ctx.tenv x arity } in
+      let%bind ctx'' =
+        List.fold
+          ~init:(Result.Ok ctx')
+          ~f:(fun ctx_opt (y, t_opt) ->
+            let%bind ctx = ctx_opt in
+            let%map tv_map = get_tvs () in
+            let tvs = Map.data tv_map in
+            let tyvs = List.map ~f:(fun tv -> Tau.TVar tv) tvs in
+            { ctx with
+              env =
+                Gamma.introduce
+                  ctx.env
+                  y
+                  (match t_opt with
+                   | Option.Some t ->
+                     Scheme.Forall
+                       (tvs, Tau.TFun (Tau.of_ty ~vm:tv_map t, Tau.TCon (x, tyvs)))
+                   | Option.None -> Scheme.Forall (tvs, Tau.TCon (x, tyvs)))
+            })
+          ctors
+      in
+      go ctx'' ds
     | [] -> Result.Ok ()
   in
-  go { env = Gamma.empty; state = State.create () }
+  go { env = Gamma.empty; state = State.create (); tenv = TyEnv.empty }
 ;;
