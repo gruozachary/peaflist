@@ -237,9 +237,30 @@ module W = struct
       Subst.compose s0 s1, ty1
     | Expr.Group e -> expr ctx e
     | Expr.Int _ -> Result.Ok (Subst.empty, Tau.TCon ("int", []))
-    | Expr.BinOp (_, _, _) -> Result.Error "Bin op typechecking not implemented"
+    | Expr.BinOp (el, o, er) ->
+      let open Expr.Bin_op in
+      (match o with
+       | Append -> Result.Error "TODO: remove"
+       | Div | Mul | Plus | Sub ->
+         let%bind s, ty = expr ctx el in
+         let%bind s', ty' = expr ctx er in
+         (match ty, ty' with
+          | Tau.TCon ("int", []), Tau.TCon ("int", []) ->
+            Result.Ok (Subst.compose s s', Tau.TCon ("int", []))
+          | _ -> Result.Error "Trying to do operation on non-ints"))
     | Expr.Match (_, _) -> Result.Error "Match typechecking not implemented"
-    | Expr.Tuple _ -> Result.Error "Tuple typechecking not implemented"
+    | Expr.Tuple es ->
+      let%map s, tys =
+        List.fold
+          ~init:(Result.Ok (Subst.empty, []))
+          ~f:(fun acc e ->
+            let%bind s, tys = acc in
+            let ctx' = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
+            let%map s', ty = expr ctx' e in
+            Subst.compose s s', ty :: tys)
+          es
+      in
+      s, Tau.TProd tys
   ;;
 end
 
