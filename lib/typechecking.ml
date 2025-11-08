@@ -10,6 +10,24 @@ module Tau = struct
     | TProd of t list
     | TCon of alpha * t list
 
+  let rec to_string = function
+    | TVar x -> x
+    | TFun (t, t') -> to_string t ^ " -> " ^ to_string t'
+    | TProd ts ->
+      List.map ~f:to_string ts
+      |> List.intersperse ~sep:" * "
+      |> List.fold ~init:"" ~f:String.append
+    | TCon (x, []) -> x
+    | TCon (x, [ t ]) -> to_string t ^ x
+    | TCon (x, ts) ->
+      "("
+      ^ (List.map ~f:to_string ts
+         |> List.intersperse ~sep:" "
+         |> List.fold ~init:"" ~f:String.append)
+      ^ ") "
+      ^ x
+  ;;
+
   let rec free_tvars = function
     | TVar tvar -> Set.of_list (module String) [ tvar ]
     | TFun (t0, t1) -> Set.union (free_tvars t0) (free_tvars t1)
@@ -37,6 +55,12 @@ end
 (*TODO: consider changing this to set*)
 module Scheme = struct
   type t = Forall of alpha list * Tau.t
+
+  let to_string (Forall (qs, t)) =
+    (List.intersperse ~sep:" " qs |> List.fold ~init:"forall " ~f:String.append)
+    ^ " . "
+    ^ Tau.to_string t
+  ;;
 
   let free_tvars = function
     | Forall (qs, ty) -> Set.diff (Set.of_list (module String) qs) (Tau.free_tvars ty)
