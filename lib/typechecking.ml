@@ -249,7 +249,7 @@ module W = struct
       let ty = State.fresh ctx.state in
       let ctx' = { ctx with env = Gamma.introduce ctx.env x (Scheme.of_type ty) } in
       let%map sub, ty' = expr ctx' e in
-      sub, Subst.apply_type ~sub ty'
+      sub, Tau.TFun (Subst.apply_type ~sub ty, Subst.apply_type ~sub ty')
     | Expr.Apply (ef, e) ->
       let%bind sub0, tyf = expr ctx ef in
       let%bind sub1, ty = expr { ctx with env = Subst.apply_gamma ~sub:sub0 ctx.env } e in
@@ -270,11 +270,12 @@ module W = struct
        | Append -> Result.Error "TODO: remove"
        | Div | Mul | Plus | Sub ->
          let%bind s, ty = expr ctx el in
-         let%bind s', ty' = expr ctx er in
-         (match ty, ty' with
-          | Tau.TCon ("int", []), Tau.TCon ("int", []) ->
-            Result.Ok (Subst.compose s s', Tau.TCon ("int", []))
-          | _ -> Result.Error "Trying to do operation on non-ints"))
+         let ctx' = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
+         let%bind s1, ty' = expr ctx' er in
+         let%bind s2 = Subst.unify ty (Tau.TCon ("int", [])) in
+         let%map s3 = Subst.unify ty' (Tau.TCon ("int", [])) in
+         let s' = Subst.compose (Subst.compose (Subst.compose s s1) s2) s3 in
+         s', Tau.TCon ("int", []))
     | Expr.Match (_, _) -> Result.Error "Match typechecking not implemented"
     | Expr.Tuple es ->
       let%map s, tys =
