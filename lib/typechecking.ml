@@ -187,6 +187,9 @@ module Subst = struct
        | List.Or_unequal_lengths.Ok x -> x
        | List.Or_unequal_lengths.Unequal_lengths ->
          Result.Error "Tuple arity must be the same")
+    (*TODO: abstract*)
+    | Tau.TCon (x, tys), Tau.TCon (x', tys') when String.equal x x' ->
+      unify (Tau.TProd tys) (Tau.TProd tys')
     | _ -> Result.Error "Type unification failed"
   ;;
 end
