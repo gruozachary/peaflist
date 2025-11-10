@@ -299,6 +299,7 @@ module W = struct
             let%map s', ty = expr ctx' e in
             Subst.compose s s', ty :: tys)
           es
+        >>| fun (s, tys) -> s, List.rev tys
       in
       s, Tau.TProd tys
   ;;
