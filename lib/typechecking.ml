@@ -10,18 +10,29 @@ module Tau = struct
     | TProd of t list
     | TCon of alpha * t list
 
-  let rec to_string = function
+  let prec = function
+    | TVar _ -> 3
+    | TFun _ -> 1
+    | TProd _ -> 2
+    | TCon _ -> 3
+  ;;
+
+  let rec to_string ty =
+    let go ty' =
+      if prec ty' < prec ty then "(" ^ to_string ty' ^ ")" else to_string ty'
+    in
+    match ty with
     | TVar x -> x
-    | TFun (t, t') -> to_string t ^ " -> " ^ to_string t'
+    | TFun (t, t') -> go t ^ " -> " ^ go t'
     | TProd ts ->
-      List.map ~f:to_string ts
+      List.map ~f:go ts
       |> List.intersperse ~sep:" * "
       |> List.fold ~init:"" ~f:String.append
     | TCon (x, []) -> x
-    | TCon (x, [ t ]) -> to_string t ^ x
+    | TCon (x, [ t ]) -> go t ^ " " ^ x
     | TCon (x, ts) ->
       "("
-      ^ (List.map ~f:to_string ts
+      ^ (List.map ~f:go ts
          |> List.intersperse ~sep:" "
          |> List.fold ~init:"" ~f:String.append)
       ^ ") "
