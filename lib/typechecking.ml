@@ -177,9 +177,9 @@ module Subst = struct
       (match
          List.fold2
            ~init:(Result.Ok empty)
-           ~f:(fun res_sub t'0 t'1 ->
+           ~f:(fun res_sub ty'0 ty'1 ->
              let%bind sub = res_sub in
-             let%map sub' = unify t'0 t'1 in
+             let%map sub' = unify (apply_type ~sub ty'0) (apply_type ~sub ty'1) in
              compose sub sub')
            tys
            tys'
@@ -252,8 +252,9 @@ module W = struct
       sub, Tau.TFun (Subst.apply_type ~sub ty, Subst.apply_type ~sub ty')
     | Expr.Apply (ef, e) ->
       let%bind sub0, tyf = expr ctx ef in
-      let%bind sub1, ty = expr { ctx with env = Subst.apply_gamma ~sub:sub0 ctx.env } e in
-      let tyv = State.fresh ctx.state in
+      let ctx' = { ctx with env = Subst.apply_gamma ~sub:sub0 ctx.env } in
+      let%bind sub1, ty = expr ctx' e in
+      let tyv = State.fresh ctx'.state in
       let%map sub2 = Subst.unify (Subst.apply_type ~sub:sub1 tyf) (Tau.TFun (ty, tyv)) in
       Subst.compose (Subst.compose sub0 sub1) sub2, Subst.apply_type ~sub:sub2 tyv
     | Expr.Binding (x, e0, e1) ->
