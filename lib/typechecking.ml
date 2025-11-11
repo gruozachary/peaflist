@@ -222,11 +222,49 @@ end
 
 type error = string
 
-type ctx =
-  { env : Gamma.t
-  ; tenv : TyEnv.t
-  ; state : State.t
-  }
+module Ctx : sig
+  type t
+
+  val empty : unit -> t
+
+  module Env : sig
+    val get : t -> Gamma.t
+    val map : t -> f:(Gamma.t -> Gamma.t) -> t
+  end
+
+  module Tenv : sig
+    val get : t -> TyEnv.t
+    val map : t -> f:(TyEnv.t -> TyEnv.t) -> t
+  end
+
+  module State : sig
+    val get : t -> State.t
+    val map : t -> f:(State.t -> State.t) -> t
+  end
+end = struct
+  type t =
+    { env : Gamma.t
+    ; tenv : TyEnv.t
+    ; state : State.t
+    }
+
+  let empty () = { env = Gamma.empty; state = State.create (); tenv = TyEnv.empty }
+
+  module Env = struct
+    let get ctx = ctx.env
+    let map ctx ~f = { ctx with env = f ctx.env }
+  end
+
+  module Tenv = struct
+    let get ctx = ctx.tenv
+    let map ctx ~f = { ctx with tenv = f ctx.tenv }
+  end
+
+  module State = struct
+    let get ctx = ctx.state
+    let map ctx ~f = { ctx with state = f ctx.state }
+  end
+end
 
 module W = struct
   let instantiate ctx = function
@@ -234,7 +272,7 @@ module W = struct
       let sub =
         List.fold
           ~init:(Map.empty (module String))
-          ~f:(fun acc key -> Map.set acc ~key ~data:(State.fresh_tv ctx.state))
+          ~f:(fun acc key -> Map.set acc ~key ~data:(Ctx.State.get ctx |> State.fresh_tv))
           qs
       in
       let rec replace sub ty =
@@ -251,7 +289,7 @@ module W = struct
   ;;
 
   let generalise ctx ty =
-    let env_tvs = Gamma.free_tvars ctx.env in
+    let env_tvs = Ctx.Env.get ctx |> Gamma.free_tvars in
     let ty_tvs = Tau.free_tvars ty in
     Scheme.Forall (Set.diff ty_tvs env_tvs |> Set.to_list, ty)
   ;;
@@ -260,34 +298,38 @@ module W = struct
     let open Result.Let_syntax in
     match e with
     | Expr.Id x ->
-      (match Gamma.lookup ctx.env x with
+      (match Gamma.lookup (Ctx.Env.get ctx) x with
        | Option.Some sc ->
          let ty = instantiate ctx sc in
          Result.Ok (Subst.empty, ty)
        | Option.None -> Result.Error "Unbound variable")
     | Expr.Constr x ->
-      (match Gamma.lookup ctx.env x with
+      (match Gamma.lookup (Ctx.Env.get ctx) x with
        | Option.Some sc ->
          let ty = instantiate ctx sc in
          Result.Ok (Subst.empty, ty)
        | Option.None -> Result.Error "Unbound constructor")
     | Expr.Lambda (x, e) ->
-      let ty = State.fresh ctx.state in
-      let ctx = { ctx with env = Gamma.introduce ctx.env x (Scheme.of_type ty) } in
+      let ty = Ctx.State.get ctx |> State.fresh in
+      let ctx =
+        Ctx.Env.map ctx ~f:(fun env -> Gamma.introduce env x (Scheme.of_type ty))
+      in
       let%map s, ty' = expr ctx e in
       s, Tau.TFun (Subst.apply_type ~sub:s ty, Subst.apply_type ~sub:s ty')
     | Expr.Apply (ef, e) ->
       let%bind s, tyf = expr ctx ef in
-      let ctx = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
+      let ctx = Ctx.Env.map ctx ~f:(fun env -> Subst.apply_gamma ~sub:s env) in
       let%bind s', ty = expr ctx e in
-      let tyv = State.fresh ctx.state in
+      let tyv = Ctx.State.get ctx |> State.fresh in
       let%map s'' = Subst.unify (Subst.apply_type ~sub:s' tyf) (Tau.TFun (ty, tyv)) in
       Subst.compose (Subst.compose s s') s'', Subst.apply_type ~sub:s'' tyv
     | Expr.Binding (x, e, e') ->
       let%bind s, ty = expr ctx e in
-      let ctx = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
+      let ctx = Ctx.Env.map ctx ~f:(fun env -> Subst.apply_gamma ~sub:s env) in
       let sc = generalise ctx ty in
-      let%map s', ty' = expr { ctx with env = Gamma.introduce ctx.env x sc } e' in
+      let%map s', ty' =
+        expr (Ctx.Env.map ctx ~f:(fun env -> Gamma.introduce env x sc)) e'
+      in
       Subst.compose s s', ty'
     | Expr.Group e -> expr ctx e
     | Expr.Int _ -> Result.Ok (Subst.empty, Tau.TCon ("int", []))
@@ -297,7 +339,7 @@ module W = struct
        | Append -> Result.Error "TODO: remove"
        | Div | Mul | Plus | Sub ->
          let%bind s, ty = expr ctx el in
-         let ctx = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
+         let ctx = Ctx.Env.map ctx ~f:(fun env -> Subst.apply_gamma ~sub:s env) in
          let%bind s1, ty' = expr ctx er in
          let%bind s2 = Subst.unify (Subst.apply_type ~sub:s1 ty) (Tau.TCon ("int", [])) in
          let%map s3 = Subst.unify (Subst.apply_type ~sub:s2 ty') (Tau.TCon ("int", [])) in
@@ -310,7 +352,7 @@ module W = struct
           ~init:(Result.Ok (Subst.empty, []))
           ~f:(fun acc e ->
             let%bind s, tys = acc in
-            let ctx = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
+            let ctx = Ctx.Env.map ctx ~f:(fun env -> Subst.apply_gamma ~sub:s env) in
             let%map s', ty = expr ctx e in
             Subst.compose s s', ty :: tys)
           es
@@ -325,45 +367,43 @@ let typecheck =
   let rec go ctx = function
     | ValDecl (x, e) :: ds ->
       let%bind s, ty = W.expr ctx e in
-      let ctx' = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
-      let sc = W.generalise ctx' ty in
-      let ctx'' = { ctx' with env = Gamma.introduce ctx'.env x sc } in
-      go ctx'' ds
+      let ctx = Ctx.Env.map ctx ~f:(fun env -> Subst.apply_gamma ~sub:s env) in
+      let sc = W.generalise ctx ty in
+      let ctx = Ctx.Env.map ctx ~f:(fun env -> Gamma.introduce env x sc) in
+      go ctx ds
     | TypeDecl (x, utvs, ctors) :: ds ->
       let arity = List.length utvs in
       let get_tvs () =
         match
           Map.of_alist
             (module String)
-            (List.map ~f:(fun tv -> tv, State.fresh_tv ctx.state) utvs)
+            (List.map ~f:(fun tv -> tv, Ctx.State.get ctx |> State.fresh_tv) utvs)
         with
         | `Ok x -> Result.Ok x
         | `Duplicate_key _ -> Result.Error "Duplicate type variable"
       in
-      let ctx' = { ctx with tenv = TyEnv.introduce ctx.tenv x arity } in
+      let ctx = Ctx.Tenv.map ctx ~f:(fun tenv -> TyEnv.introduce tenv x arity) in
       let%bind ctx'' =
         List.fold
-          ~init:(Result.Ok ctx')
+          ~init:(Result.Ok ctx)
           ~f:(fun ctx_opt (y, t_opt) ->
             let%bind ctx = ctx_opt in
             let%map tv_map = get_tvs () in
             let tvs = Map.data tv_map in
             let tyvs = List.map ~f:(fun tv -> Tau.TVar tv) tvs in
-            { ctx with
-              env =
-                Gamma.introduce
-                  ctx.env
-                  y
-                  (match t_opt with
-                   | Option.Some t ->
-                     Scheme.Forall
-                       (tvs, Tau.TFun (Tau.of_ty ~vm:tv_map t, Tau.TCon (x, tyvs)))
-                   | Option.None -> Scheme.Forall (tvs, Tau.TCon (x, tyvs)))
-            })
+            Ctx.Env.map ctx ~f:(fun env ->
+              Gamma.introduce
+                env
+                y
+                (match t_opt with
+                 | Option.Some t ->
+                   Scheme.Forall
+                     (tvs, Tau.TFun (Tau.of_ty ~vm:tv_map t, Tau.TCon (x, tyvs)))
+                 | Option.None -> Scheme.Forall (tvs, Tau.TCon (x, tyvs)))))
           ctors
       in
       go ctx'' ds
     | [] -> Result.Ok ctx
   in
-  go { env = Gamma.empty; state = State.create (); tenv = TyEnv.empty }
+  go (Ctx.empty ())
 ;;
