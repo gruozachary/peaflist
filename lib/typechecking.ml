@@ -3,7 +3,19 @@ open Ast
 
 type alpha = string
 
-module Tau = struct
+module rec Tau : sig
+  type t =
+    | TVar of alpha
+    | TFun of t * t
+    | TProd of t list
+    | TCon of alpha * t list
+
+  val to_string : t -> string
+  val free_tvars : t -> (alpha, String.comparator_witness) Set.t
+  val occurs : alpha -> t -> bool
+  val of_ty : vm:(alpha, alpha, String.comparator_witness) Map.t -> Ty.t -> t
+  val apply_sub : t -> sub:Subst.t -> t
+end = struct
   type t =
     | TVar of alpha
     | TFun of t * t
@@ -61,10 +73,28 @@ module Tau = struct
     | Ty.Prod ts -> TProd (List.map ~f:(of_ty ~vm) ts)
     | Ty.App (x, ts) -> TCon (x, List.map ~f:(of_ty ~vm) ts)
   ;;
+
+  let rec apply_sub ty ~sub =
+    match ty with
+    | Tau.TVar x ->
+      (match Map.find sub x with
+       | Some ty' -> ty'
+       | None -> ty)
+    | Tau.TFun (ty0, ty1) -> TFun (apply_sub ~sub ty0, apply_sub ~sub ty1)
+    | Tau.TProd tys -> TProd (List.map tys ~f:(apply_sub ~sub))
+    | Tau.TCon (tvar, tys) -> TCon (tvar, List.map tys ~f:(apply_sub ~sub))
+  ;;
 end
 
 (*TODO: consider changing this to set*)
-module Scheme = struct
+and Scheme : sig
+  type t = Forall of alpha list * Tau.t
+
+  val to_string : t -> string
+  val free_tvars : t -> (alpha, String.comparator_witness) Set.t
+  val of_tau : Tau.t -> t
+  val apply_sub : t -> sub:Subst.t -> t
+end = struct
   type t = Forall of alpha list * Tau.t
 
   let to_string (Forall (qs, t)) =
@@ -77,24 +107,33 @@ module Scheme = struct
     | Forall (qs, ty) -> Set.diff (Set.of_list (module String) qs) (Tau.free_tvars ty)
   ;;
 
-  let of_type ty = Forall ([], ty)
+  let of_tau ty = Forall ([], ty)
+
+  let apply_sub sc ~sub =
+    let (Scheme.Forall (qs, ty)) = sc in
+    let sub =
+      Map.filter_keys sub ~f:(fun tv -> List.exists qs ~f:(equal_string tv) |> not)
+    in
+    Scheme.Forall (qs, Tau.apply_sub ~sub ty)
+  ;;
 end
 
-module Gamma : sig
+and Gamma : sig
   type t
 
-  module Merge_element : module type of struct
-    include Map.Merge_element
+  module Merge_element : sig
+    include module type of Map.Merge_element
 
     type nonrec t = (Scheme.t, Scheme.t) t
   end
 
   val empty : t
-  val introduce : t -> alpha -> Scheme.t -> t
-  val lookup : t -> alpha -> Scheme.t Option.t
+  val introduce : t -> id:alpha -> sc:Scheme.t -> t
+  val lookup : t -> id:alpha -> Scheme.t Option.t
   val map : t -> f:(Scheme.t -> Scheme.t) -> t
   val free_tvars : t -> (alpha, String.comparator_witness) Set.t
   val merge : t -> t -> f:(key:alpha -> Merge_element.t -> Scheme.t Option.t) -> t
+  val apply_sub : t -> sub:Subst.t -> t
 end = struct
   type t = (alpha, Scheme.t, String.comparator_witness) Map.t
 
@@ -105,8 +144,8 @@ end = struct
   end
 
   let empty : t = Map.empty (module String)
-  let introduce env tid sc = Map.set env ~key:tid ~data:sc
-  let lookup env tid = Map.find env tid
+  let introduce env ~id ~sc = Map.set env ~key:id ~data:sc
+  let lookup env ~id = Map.find env id
   let map env ~f = Map.map ~f env
 
   let free_tvars env =
@@ -117,61 +156,33 @@ end = struct
   ;;
 
   let merge = Map.merge
+  let apply_sub env ~sub = Gamma.map env ~f:(fun sc -> Scheme.apply_sub ~sub sc)
 end
 
-module TyEnv : sig
-  type t
-  type arity = int
+and Subst : sig
+  type t = (alpha, Tau.t, String.comparator_witness) Map.t
 
   val empty : t
-  val introduce : t -> alpha -> arity -> t
-  val lookup : t -> alpha -> arity Option.t
+  val add : t -> tv:alpha -> ty:Tau.t -> (t, string) Result.t
+  val compose : t -> t -> t
+  val unify : Tau.t -> Tau.t -> (t, string) Result.t
 end = struct
-  type arity = int
-  type t = (alpha, arity, String.comparator_witness) Map.t
-
-  let empty : t = Map.empty (module String)
-  let introduce env tid sc = Map.set env ~key:tid ~data:sc
-  let lookup env tid = Map.find env tid
-end
-
-module State = struct
-  type t = { mutable next : int }
-
-  let create () = { next = 0 }
-
-  let fresh_tv s =
-    let v = s.next in
-    s.next <- v + 1;
-    "_'_tvar" ^ Int.to_string v
-  ;;
-
-  let fresh s = Tau.TVar (fresh_tv s)
-end
-
-module Subst = struct
   type t = (alpha, Tau.t, String.comparator_witness) Map.t
 
   let empty : t = Map.empty (module String)
 
-  let rec apply_type ~sub ty =
+  let rec apply_type sub ~ty =
     match ty with
     | Tau.TVar x ->
       (match Map.find sub x with
        | Some ty' -> ty'
        | None -> ty)
-    | Tau.TFun (ty0, ty1) -> TFun (apply_type ~sub ty0, apply_type ~sub ty1)
-    | Tau.TProd tys -> TProd (List.map tys ~f:(apply_type ~sub))
-    | Tau.TCon (tvar, tys) -> TCon (tvar, List.map tys ~f:(apply_type ~sub))
+    | Tau.TFun (ty0, ty1) -> TFun (apply_type sub ~ty:ty0, apply_type sub ~ty:ty1)
+    | Tau.TProd tys -> TProd (List.map tys ~f:(fun ty -> apply_type sub ~ty))
+    | Tau.TCon (tvar, tys) -> TCon (tvar, List.map tys ~f:(fun ty -> apply_type sub ~ty))
+  ;;
 
-  and apply_scheme ~sub sc =
-    let (Scheme.Forall (qs, ty)) = sc in
-    let sub' = Map.filter_keys sub ~f:(fun tv -> List.exists qs ~f:(equal_string tv)) in
-    Scheme.Forall (qs, apply_type ~sub:sub' ty)
-
-  and apply_gamma ~sub env = Gamma.map env ~f:(apply_scheme ~sub)
-
-  let add ~sub tv ty =
+  let add sub ~tv ~ty =
     match ty with
     | Tau.TVar tv' ->
       if equal_string tv tv'
@@ -194,10 +205,10 @@ module Subst = struct
   let rec unify ty0 ty1 =
     let open Result.Let_syntax in
     match ty0, ty1 with
-    | Tau.TVar tv, ty | ty, Tau.TVar tv -> add ~sub:empty tv ty
+    | Tau.TVar tv, ty | ty, Tau.TVar tv -> add empty ~tv ~ty
     | Tau.TFun (ty_l0, ty_r0), TFun (ty_l1, ty_r1) ->
       let%bind sub = unify ty_l0 ty_l1 in
-      let%map sub' = unify (apply_type ~sub ty_r0) (apply_type ~sub ty_r1) in
+      let%map sub' = unify (apply_type sub ~ty:ty_r0) (apply_type sub ~ty:ty_r1) in
       compose sub sub'
     | Tau.TProd tys, Tau.TProd tys' ->
       (match
@@ -205,7 +216,7 @@ module Subst = struct
            ~init:(Result.Ok empty)
            ~f:(fun res_sub ty'0 ty'1 ->
              let%bind sub = res_sub in
-             let%map sub' = unify (apply_type ~sub ty'0) (apply_type ~sub ty'1) in
+             let%map sub' = unify (apply_type sub ~ty:ty'0) (apply_type sub ~ty:ty'1) in
              compose sub sub')
            tys
            tys'
@@ -218,6 +229,36 @@ module Subst = struct
       unify (Tau.TProd tys) (Tau.TProd tys')
     | _ -> Result.Error "Type unification failed"
   ;;
+end
+
+module TyEnv : sig
+  type t
+  type arity = int
+
+  val empty : t
+  val introduce : t -> id:alpha -> arity:arity -> t
+  val lookup : t -> id:alpha -> arity Option.t
+end = struct
+  type arity = int
+  type t = (alpha, arity, String.comparator_witness) Map.t
+
+  let empty : t = Map.empty (module String)
+  let introduce env ~id ~arity = Map.set env ~key:id ~data:arity
+  let lookup env ~id = Map.find env id
+end
+
+module State = struct
+  type t = { mutable next : int }
+
+  let create () = { next = 0 }
+
+  let fresh_tv s =
+    let v = s.next in
+    s.next <- v + 1;
+    "_'_tvar" ^ Int.to_string v
+  ;;
+
+  let fresh s = Tau.TVar (fresh_tv s)
 end
 
 type error = string
@@ -298,38 +339,34 @@ module W = struct
     let open Result.Let_syntax in
     match e with
     | Expr.Id x ->
-      (match Gamma.lookup (Ctx.Env.get ctx) x with
+      (match Ctx.Env.get ctx |> Gamma.lookup ~id:x with
        | Option.Some sc ->
          let ty = instantiate ctx sc in
          Result.Ok (Subst.empty, ty)
        | Option.None -> Result.Error "Unbound variable")
     | Expr.Constr x ->
-      (match Gamma.lookup (Ctx.Env.get ctx) x with
+      (match Ctx.Env.get ctx |> Gamma.lookup ~id:x with
        | Option.Some sc ->
          let ty = instantiate ctx sc in
          Result.Ok (Subst.empty, ty)
        | Option.None -> Result.Error "Unbound constructor")
     | Expr.Lambda (x, e) ->
       let ty = Ctx.State.get ctx |> State.fresh in
-      let ctx =
-        Ctx.Env.map ctx ~f:(fun env -> Gamma.introduce env x (Scheme.of_type ty))
-      in
+      let ctx = Ctx.Env.map ctx ~f:(Gamma.introduce ~id:x ~sc:(Scheme.of_tau ty)) in
       let%map s, ty' = expr ctx e in
-      s, Tau.TFun (Subst.apply_type ~sub:s ty, Subst.apply_type ~sub:s ty')
+      s, Tau.TFun (Tau.apply_sub ~sub:s ty, Tau.apply_sub ~sub:s ty')
     | Expr.Apply (ef, e) ->
       let%bind s, tyf = expr ctx ef in
-      let ctx = Ctx.Env.map ctx ~f:(fun env -> Subst.apply_gamma ~sub:s env) in
+      let ctx = Ctx.Env.map ctx ~f:(Gamma.apply_sub ~sub:s) in
       let%bind s', ty = expr ctx e in
       let tyv = Ctx.State.get ctx |> State.fresh in
-      let%map s'' = Subst.unify (Subst.apply_type ~sub:s' tyf) (Tau.TFun (ty, tyv)) in
-      Subst.compose (Subst.compose s s') s'', Subst.apply_type ~sub:s'' tyv
+      let%map s'' = Subst.unify (Tau.apply_sub ~sub:s' tyf) (Tau.TFun (ty, tyv)) in
+      Subst.compose (Subst.compose s s') s'', Tau.apply_sub ~sub:s'' tyv
     | Expr.Binding (x, e, e') ->
       let%bind s, ty = expr ctx e in
-      let ctx = Ctx.Env.map ctx ~f:(fun env -> Subst.apply_gamma ~sub:s env) in
+      let ctx = Ctx.Env.map ctx ~f:(Gamma.apply_sub ~sub:s) in
       let sc = generalise ctx ty in
-      let%map s', ty' =
-        expr (Ctx.Env.map ctx ~f:(fun env -> Gamma.introduce env x sc)) e'
-      in
+      let%map s', ty' = expr (Ctx.Env.map ctx ~f:(Gamma.introduce ~id:x ~sc)) e' in
       Subst.compose s s', ty'
     | Expr.Group e -> expr ctx e
     | Expr.Int _ -> Result.Ok (Subst.empty, Tau.TCon ("int", []))
@@ -339,10 +376,10 @@ module W = struct
        | Append -> Result.Error "TODO: remove"
        | Div | Mul | Plus | Sub ->
          let%bind s, ty = expr ctx el in
-         let ctx = Ctx.Env.map ctx ~f:(fun env -> Subst.apply_gamma ~sub:s env) in
+         let ctx = Ctx.Env.map ctx ~f:(Gamma.apply_sub ~sub:s) in
          let%bind s1, ty' = expr ctx er in
-         let%bind s2 = Subst.unify (Subst.apply_type ~sub:s1 ty) (Tau.TCon ("int", [])) in
-         let%map s3 = Subst.unify (Subst.apply_type ~sub:s2 ty') (Tau.TCon ("int", [])) in
+         let%bind s2 = Subst.unify (Tau.apply_sub ~sub:s1 ty) (Tau.TCon ("int", [])) in
+         let%map s3 = Subst.unify (Tau.apply_sub ~sub:s2 ty') (Tau.TCon ("int", [])) in
          let s' = Subst.compose (Subst.compose (Subst.compose s s1) s2) s3 in
          s', Tau.TCon ("int", []))
     | Expr.Match (_, _) -> Result.Error "Match typechecking not implemented"
@@ -352,12 +389,12 @@ module W = struct
           ~init:(Result.Ok (Subst.empty, []))
           ~f:(fun acc e ->
             let%bind s, tys = acc in
-            let ctx = Ctx.Env.map ctx ~f:(fun env -> Subst.apply_gamma ~sub:s env) in
+            let ctx = Ctx.Env.map ctx ~f:(Gamma.apply_sub ~sub:s) in
             let%map s', ty = expr ctx e in
             Subst.compose s s', ty :: tys)
           es
       in
-      let tys = List.map ~f:(Subst.apply_type ~sub:s) tys in
+      let tys = List.map ~f:(Tau.apply_sub ~sub:s) tys in
       s, Tau.TProd (List.rev tys)
   ;;
 end
@@ -367,9 +404,9 @@ let typecheck =
   let rec go ctx = function
     | ValDecl (x, e) :: ds ->
       let%bind s, ty = W.expr ctx e in
-      let ctx = Ctx.Env.map ctx ~f:(fun env -> Subst.apply_gamma ~sub:s env) in
+      let ctx = Ctx.Env.map ctx ~f:(Gamma.apply_sub ~sub:s) in
       let sc = W.generalise ctx ty in
-      let ctx = Ctx.Env.map ctx ~f:(fun env -> Gamma.introduce env x sc) in
+      let ctx = Ctx.Env.map ctx ~f:(Gamma.introduce ~id:x ~sc) in
       go ctx ds
     | TypeDecl (x, utvs, ctors) :: ds ->
       let arity = List.length utvs in
@@ -382,7 +419,7 @@ let typecheck =
         | `Ok x -> Result.Ok x
         | `Duplicate_key _ -> Result.Error "Duplicate type variable"
       in
-      let ctx = Ctx.Tenv.map ctx ~f:(fun tenv -> TyEnv.introduce tenv x arity) in
+      let ctx = Ctx.Tenv.map ctx ~f:(TyEnv.introduce ~id:x ~arity) in
       let%bind ctx'' =
         List.fold
           ~init:(Result.Ok ctx)
@@ -391,15 +428,17 @@ let typecheck =
             let%map tv_map = get_tvs () in
             let tvs = Map.data tv_map in
             let tyvs = List.map ~f:(fun tv -> Tau.TVar tv) tvs in
-            Ctx.Env.map ctx ~f:(fun env ->
-              Gamma.introduce
-                env
-                y
-                (match t_opt with
-                 | Option.Some t ->
-                   Scheme.Forall
-                     (tvs, Tau.TFun (Tau.of_ty ~vm:tv_map t, Tau.TCon (x, tyvs)))
-                 | Option.None -> Scheme.Forall (tvs, Tau.TCon (x, tyvs)))))
+            Ctx.Env.map
+              ctx
+              ~f:
+                (Gamma.introduce
+                   ~id:y
+                   ~sc:
+                     (match t_opt with
+                      | Option.Some t ->
+                        Scheme.Forall
+                          (tvs, Tau.TFun (Tau.of_ty ~vm:tv_map t, Tau.TCon (x, tyvs)))
+                      | Option.None -> Scheme.Forall (tvs, Tau.TCon (x, tyvs)))))
           ctors
       in
       go ctx'' ds
