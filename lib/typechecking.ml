@@ -83,13 +83,26 @@ end
 module Gamma : sig
   type t
 
+  module Merge_element : module type of struct
+    include Map.Merge_element
+
+    type nonrec t = (Scheme.t, Scheme.t) t
+  end
+
   val empty : t
   val introduce : t -> alpha -> Scheme.t -> t
   val lookup : t -> alpha -> Scheme.t Option.t
   val map : t -> f:(Scheme.t -> Scheme.t) -> t
   val free_tvars : t -> (alpha, String.comparator_witness) Set.t
+  val merge : t -> t -> f:(key:alpha -> Merge_element.t -> Scheme.t Option.t) -> t
 end = struct
   type t = (alpha, Scheme.t, String.comparator_witness) Map.t
+
+  module Merge_element = struct
+    include Map.Merge_element
+
+    type nonrec t = (Scheme.t, Scheme.t) t
+  end
 
   let empty : t = Map.empty (module String)
   let introduce env tid sc = Map.set env ~key:tid ~data:sc
@@ -102,6 +115,8 @@ end = struct
       ~init:(Set.empty (module String))
       ~f:(fun ~key:_ ~data acc -> Set.union acc (Scheme.free_tvars data))
   ;;
+
+  let merge = Map.merge
 end
 
 module TyEnv : sig
