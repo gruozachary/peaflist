@@ -273,22 +273,22 @@ module W = struct
        | Option.None -> Result.Error "Unbound constructor")
     | Expr.Lambda (x, e) ->
       let ty = State.fresh ctx.state in
-      let ctx' = { ctx with env = Gamma.introduce ctx.env x (Scheme.of_type ty) } in
-      let%map sub, ty' = expr ctx' e in
-      sub, Tau.TFun (Subst.apply_type ~sub ty, Subst.apply_type ~sub ty')
+      let ctx = { ctx with env = Gamma.introduce ctx.env x (Scheme.of_type ty) } in
+      let%map s, ty' = expr ctx e in
+      s, Tau.TFun (Subst.apply_type ~sub:s ty, Subst.apply_type ~sub:s ty')
     | Expr.Apply (ef, e) ->
-      let%bind sub0, tyf = expr ctx ef in
-      let ctx' = { ctx with env = Subst.apply_gamma ~sub:sub0 ctx.env } in
-      let%bind sub1, ty = expr ctx' e in
-      let tyv = State.fresh ctx'.state in
-      let%map sub2 = Subst.unify (Subst.apply_type ~sub:sub1 tyf) (Tau.TFun (ty, tyv)) in
-      Subst.compose (Subst.compose sub0 sub1) sub2, Subst.apply_type ~sub:sub2 tyv
-    | Expr.Binding (x, e0, e1) ->
-      let%bind s0, ty0 = expr ctx e0 in
-      let ctx' = { ctx with env = Subst.apply_gamma ~sub:s0 ctx.env } in
-      let sc = generalise ctx' ty0 in
-      let%map s1, ty1 = expr { ctx' with env = Gamma.introduce ctx'.env x sc } e1 in
-      Subst.compose s0 s1, ty1
+      let%bind s, tyf = expr ctx ef in
+      let ctx = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
+      let%bind s', ty = expr ctx e in
+      let tyv = State.fresh ctx.state in
+      let%map s'' = Subst.unify (Subst.apply_type ~sub:s' tyf) (Tau.TFun (ty, tyv)) in
+      Subst.compose (Subst.compose s s') s'', Subst.apply_type ~sub:s'' tyv
+    | Expr.Binding (x, e, e') ->
+      let%bind s, ty = expr ctx e in
+      let ctx = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
+      let sc = generalise ctx ty in
+      let%map s', ty' = expr { ctx with env = Gamma.introduce ctx.env x sc } e' in
+      Subst.compose s s', ty'
     | Expr.Group e -> expr ctx e
     | Expr.Int _ -> Result.Ok (Subst.empty, Tau.TCon ("int", []))
     | Expr.BinOp (el, o, er) ->
@@ -297,10 +297,10 @@ module W = struct
        | Append -> Result.Error "TODO: remove"
        | Div | Mul | Plus | Sub ->
          let%bind s, ty = expr ctx el in
-         let ctx' = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
-         let%bind s1, ty' = expr ctx' er in
-         let%bind s2 = Subst.unify ty (Tau.TCon ("int", [])) in
-         let%map s3 = Subst.unify ty' (Tau.TCon ("int", [])) in
+         let ctx = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
+         let%bind s1, ty' = expr ctx er in
+         let%bind s2 = Subst.unify (Subst.apply_type ~sub:s1 ty) (Tau.TCon ("int", [])) in
+         let%map s3 = Subst.unify (Subst.apply_type ~sub:s2 ty') (Tau.TCon ("int", [])) in
          let s' = Subst.compose (Subst.compose (Subst.compose s s1) s2) s3 in
          s', Tau.TCon ("int", []))
     | Expr.Match (_, _) -> Result.Error "Match typechecking not implemented"
@@ -310,13 +310,13 @@ module W = struct
           ~init:(Result.Ok (Subst.empty, []))
           ~f:(fun acc e ->
             let%bind s, tys = acc in
-            let ctx' = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
-            let%map s', ty = expr ctx' e in
+            let ctx = { ctx with env = Subst.apply_gamma ~sub:s ctx.env } in
+            let%map s', ty = expr ctx e in
             Subst.compose s s', ty :: tys)
           es
-        >>| fun (s, tys) -> s, List.rev tys
       in
-      s, Tau.TProd tys
+      let tys = List.map ~f:(Subst.apply_type ~sub:s) tys in
+      s, Tau.TProd (List.rev tys)
   ;;
 end
 
