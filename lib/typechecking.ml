@@ -127,7 +127,7 @@ and Gamma : sig
     type nonrec t = (Scheme.t, Scheme.t) t
   end
 
-  val empty : t
+  val empty : unit -> t
   val introduce : t -> id:alpha -> sc:Scheme.t -> t
   val lookup : t -> id:alpha -> Scheme.t Option.t
   val map : t -> f:(Scheme.t -> Scheme.t) -> t
@@ -143,7 +143,7 @@ end = struct
     type nonrec t = (Scheme.t, Scheme.t) t
   end
 
-  let empty : t = Map.empty (module String)
+  let empty () = Map.empty (module String)
   let introduce env ~id ~sc = Map.set env ~key:id ~data:sc
   let lookup env ~id = Map.find env id
   let map env ~f = Map.map ~f env
@@ -289,7 +289,7 @@ end = struct
     ; state : State.t
     }
 
-  let empty () = { env = Gamma.empty; state = State.create (); tenv = TyEnv.empty }
+  let empty () = { env = Gamma.empty (); state = State.create (); tenv = TyEnv.empty }
 
   module Env = struct
     let get ctx = ctx.env
