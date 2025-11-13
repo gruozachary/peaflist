@@ -3,21 +3,40 @@ open Ast
 
 type alpha = string
 
+module Tvar : sig
+  type t
+
+  val to_string : t -> string
+  val of_int : int -> t
+
+  include Comparable.S with type t := t
+end = struct
+  module T = struct
+    type t = int [@@deriving compare, sexp]
+
+    let to_string tvar = "__tvar" ^ Int.to_string tvar
+    let of_int x = x
+  end
+
+  include T
+  include Comparable.Make (T)
+end
+
 module rec Tau : sig
   type t =
-    | TVar of alpha
+    | TVar of Tvar.t
     | TFun of t * t
     | TProd of t list
     | TCon of alpha * t list
 
   val to_string : t -> string
-  val free_tvars : t -> (alpha, String.comparator_witness) Set.t
-  val occurs : alpha -> t -> bool
-  val of_ty : vm:(alpha, alpha, String.comparator_witness) Map.t -> Ty.t -> t
+  val free_tvars : t -> (Tvar.t, Tvar.comparator_witness) Set.t
+  val occurs : Tvar.t -> t -> bool
+  val of_ty : vm:(alpha, Tvar.t, String.comparator_witness) Map.t -> Ty.t -> t
   val apply_sub : t -> sub:Subst.t -> t
 end = struct
   type t =
-    | TVar of alpha
+    | TVar of Tvar.t
     | TFun of t * t
     | TProd of t list
     | TCon of alpha * t list
@@ -34,7 +53,7 @@ end = struct
       if prec ty' < prec ty then "(" ^ to_string ty' ^ ")" else to_string ty'
     in
     match ty with
-    | TVar x -> x
+    | TVar x -> Tvar.to_string x
     | TFun (t, t') -> go t ^ " -> " ^ go t'
     | TProd ts ->
       List.map ~f:go ts
@@ -52,23 +71,23 @@ end = struct
   ;;
 
   let rec free_tvars = function
-    | TVar tvar -> Set.of_list (module String) [ tvar ]
+    | TVar tvar -> Set.of_list (module Tvar) [ tvar ]
     | TFun (t0, t1) -> Set.union (free_tvars t0) (free_tvars t1)
-    | TProd ts -> Set.union_list (module String) (List.map ~f:(fun t -> free_tvars t) ts)
+    | TProd ts -> Set.union_list (module Tvar) (List.map ~f:(fun t -> free_tvars t) ts)
     | TCon (_, ts) ->
-      Set.union_list (module String) (List.map ~f:(fun t -> free_tvars t) ts)
+      Set.union_list (module Tvar) (List.map ~f:(fun t -> free_tvars t) ts)
   ;;
 
   let rec occurs tvar t : bool =
     match t with
-    | TVar x -> equal_string x tvar
+    | TVar x -> Tvar.equal x tvar
     | TFun (t'0, t'1) -> occurs tvar t'0 || occurs tvar t'1
     | TProd ts -> List.exists ~f:(occurs tvar) ts
-    | TCon (tvar', ts) -> equal_string tvar tvar' || List.exists ~f:(occurs tvar) ts
+    | TCon (_, ts) -> List.exists ~f:(occurs tvar) ts
   ;;
 
   let rec of_ty ~vm = function
-    | Ty.Id x -> TVar (Option.value (Map.find vm x) ~default:x)
+    | Ty.Id x -> TVar (Option.value (Map.find vm x) ~default:(assert false))
     | Ty.Fun (t, t') -> TFun (of_ty ~vm t, of_ty ~vm t')
     | Ty.Prod ts -> TProd (List.map ~f:(of_ty ~vm) ts)
     | Ty.App (x, ts) -> TCon (x, List.map ~f:(of_ty ~vm) ts)
@@ -88,23 +107,25 @@ end
 
 (*TODO: consider changing this to set*)
 and Scheme : sig
-  type t = Forall of alpha list * Tau.t
+  type t = Forall of Tvar.t list * Tau.t
 
   val to_string : t -> string
-  val free_tvars : t -> (alpha, String.comparator_witness) Set.t
+  val free_tvars : t -> (Tvar.t, Tvar.comparator_witness) Set.t
   val of_tau : Tau.t -> t
   val apply_sub : t -> sub:Subst.t -> t
 end = struct
-  type t = Forall of alpha list * Tau.t
+  type t = Forall of Tvar.t list * Tau.t
 
   let to_string (Forall (qs, t)) =
-    (List.intersperse ~sep:" " qs |> List.fold ~init:"forall " ~f:String.append)
+    (List.map qs ~f:Tvar.to_string
+     |> List.intersperse ~sep:" "
+     |> List.fold ~init:"forall " ~f:String.append)
     ^ " . "
     ^ Tau.to_string t
   ;;
 
   let free_tvars = function
-    | Forall (qs, ty) -> Set.diff (Set.of_list (module String) qs) (Tau.free_tvars ty)
+    | Forall (qs, ty) -> Set.diff (Set.of_list (module Tvar) qs) (Tau.free_tvars ty)
   ;;
 
   let of_tau ty = Forall ([], ty)
@@ -112,7 +133,7 @@ end = struct
   let apply_sub sc ~sub =
     let (Scheme.Forall (qs, ty)) = sc in
     let sub =
-      Map.filter_keys sub ~f:(fun tv -> List.exists qs ~f:(equal_string tv) |> not)
+      Map.filter_keys sub ~f:(fun tv -> List.exists qs ~f:(Tvar.equal tv) |> not)
     in
     Scheme.Forall (qs, Tau.apply_sub ~sub ty)
   ;;
@@ -131,7 +152,7 @@ and Gamma : sig
   val introduce : t -> id:alpha -> sc:Scheme.t -> t
   val lookup : t -> id:alpha -> Scheme.t Option.t
   val map : t -> f:(Scheme.t -> Scheme.t) -> t
-  val free_tvars : t -> (alpha, String.comparator_witness) Set.t
+  val free_tvars : t -> (Tvar.t, Tvar.comparator_witness) Set.t
   val merge : t -> t -> f:(key:alpha -> Merge_element.t -> Scheme.t Option.t) -> t
   val apply_sub : t -> sub:Subst.t -> t
 end = struct
@@ -151,7 +172,7 @@ end = struct
   let free_tvars env =
     Map.fold
       env
-      ~init:(Set.empty (module String))
+      ~init:(Set.empty (module Tvar))
       ~f:(fun ~key:_ ~data acc -> Set.union acc (Scheme.free_tvars data))
   ;;
 
@@ -160,16 +181,16 @@ end = struct
 end
 
 and Subst : sig
-  type t = (alpha, Tau.t, String.comparator_witness) Map.t
+  type t = (Tvar.t, Tau.t, Tvar.comparator_witness) Map.t
 
   val empty : t
-  val add : t -> tv:alpha -> ty:Tau.t -> (t, string) Result.t
+  val add : t -> tv:Tvar.t -> ty:Tau.t -> (t, string) Result.t
   val compose : t -> t -> t
   val unify : Tau.t -> Tau.t -> (t, string) Result.t
 end = struct
-  type t = (alpha, Tau.t, String.comparator_witness) Map.t
+  type t = (Tvar.t, Tau.t, Tvar.comparator_witness) Map.t
 
-  let empty : t = Map.empty (module String)
+  let empty : t = Map.empty (module Tvar)
 
   let rec apply_type sub ~ty =
     match ty with
@@ -185,7 +206,7 @@ end = struct
   let add sub ~tv ~ty =
     match ty with
     | Tau.TVar tv' ->
-      if equal_string tv tv'
+      if Tvar.equal tv tv'
       then Result.Ok sub
       else Result.Ok (Map.set sub ~key:tv ~data:ty)
     | _ ->
@@ -255,7 +276,7 @@ module State = struct
   let fresh_tv s =
     let v = s.next in
     s.next <- v + 1;
-    "_'_tvar" ^ Int.to_string v
+    Tvar.of_int v
   ;;
 
   let fresh s = Tau.TVar (fresh_tv s)
@@ -312,7 +333,7 @@ module W = struct
     | Scheme.Forall (qs, ty) ->
       let sub =
         List.fold
-          ~init:(Map.empty (module String))
+          ~init:(Map.empty (module Tvar))
           ~f:(fun acc key -> Map.set acc ~key ~data:(Ctx.State.get ctx |> State.fresh_tv))
           qs
       in
