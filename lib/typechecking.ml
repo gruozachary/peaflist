@@ -356,6 +356,48 @@ module W = struct
     Scheme.Forall (Set.diff ty_tvs env_tvs |> Set.to_list, ty)
   ;;
 
+  let rec pat ctx p =
+    let open Result.Let_syntax in
+    match p with
+    | Pat.CtorApp (x, po) ->
+      let%bind t =
+        Result.of_option
+          ~error:"Unbound constructor in pattern"
+          (Option.map (Ctx.Env.get ctx |> Gamma.lookup ~id:x) ~f:(instantiate ctx))
+      in
+      (match t, po with
+       | Tau.TFun _, Option.Some p ->
+         let%bind s, g, t' = pat ctx p in
+         let t'' = Ctx.State.get ctx |> State.fresh in
+         let%map s' = Subst.unify (Tau.TFun (t', t'')) t in
+         let s'' = Subst.compose s s' in
+         s'', g, Tau.apply_sub ~sub:s'' t''
+       | Tau.TCon _, Option.None -> Result.Ok (Subst.empty, Gamma.empty (), t)
+       | _ -> assert false)
+    | Pat.Ident x ->
+      let t = Ctx.State.get ctx |> State.fresh in
+      Result.Ok
+        (Subst.empty, Gamma.introduce ~id:x ~sc:(Scheme.of_tau t) (Gamma.empty ()), t)
+    | Pat.Int _ -> Result.Ok (Subst.empty, Gamma.empty (), Tau.TCon ("int", []))
+    | Pat.Tuple ps ->
+      let%map s, g, ts =
+        List.fold
+          ~init:(Result.Ok (Subst.empty, Gamma.empty (), []))
+          ~f:(fun sgo p ->
+            let%bind s, g, ts = sgo in
+            let%map s', g', t = pat ctx p in
+            ( Subst.compose s s'
+            , Gamma.merge g g' ~f:(fun ~key:_ m ->
+                match m with
+                | `Left x -> Option.Some x
+                | `Right x -> Option.Some x
+                | `Both (_, r) -> Option.Some r)
+            , t :: ts ))
+          ps
+      in
+      s, g, Tau.TProd ts
+  ;;
+
   let rec expr ctx e =
     let open Result.Let_syntax in
     match e with
