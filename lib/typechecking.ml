@@ -155,6 +155,7 @@ and Gamma : sig
   val free_tvars : t -> (Tvar.t, Tvar.comparator_witness) Set.t
   val merge : t -> t -> f:(key:alpha -> Merge_element.t -> Scheme.t Option.t) -> t
   val apply_sub : t -> sub:Subst.t -> t
+  val size : t -> int
 end = struct
   type t = (alpha, Scheme.t, String.comparator_witness) Map.t
 
@@ -178,6 +179,7 @@ end = struct
 
   let merge = Map.merge
   let apply_sub env ~sub = Gamma.map env ~f:(fun sc -> Scheme.apply_sub ~sub sc)
+  let size = Map.length
 end
 
 and Subst : sig
@@ -373,7 +375,7 @@ module W = struct
          let s'' = Subst.compose s s' in
          s'', g, Tau.apply_sub ~sub:s'' t''
        | Tau.TCon _, Option.None -> Result.Ok (Subst.empty, Gamma.empty (), t)
-       | _ -> assert false)
+       | _ -> Result.Error "Constructor arity mismatch in pattern")
     | Pat.Ident x ->
       let t = Ctx.State.get ctx |> State.fresh in
       Result.Ok
@@ -385,17 +387,24 @@ module W = struct
           ~init:(Result.Ok (Subst.empty, Gamma.empty (), []))
           ~f:(fun sgo p ->
             let%bind s, g, ts = sgo in
-            let%map s', g', t = pat ctx p in
-            ( Subst.compose s s'
-            , Gamma.merge g g' ~f:(fun ~key:_ m ->
+            let%bind s', g', t = pat ctx p in
+            let g = Gamma.apply_sub ~sub:s' g in
+            let g'' =
+              Gamma.merge g g' ~f:(fun ~key:_ m ->
                 match m with
                 | `Left x -> Option.Some x
                 | `Right x -> Option.Some x
-                | `Both (_, r) -> Option.Some r)
-            , t :: ts ))
+                | `Both _ -> Option.None)
+            in
+            let%map g'' =
+              if equal_int (Gamma.size g'') (Gamma.size g + Gamma.size g')
+              then Result.Ok g''
+              else Result.Error "Variable redefinition inside of pattern"
+            in
+            Subst.compose s s', g'', t :: List.map ~f:(Tau.apply_sub ~sub:s') ts)
           ps
       in
-      s, g, Tau.TProd ts
+      s, g, Tau.TProd (List.rev ts)
   ;;
 
   let rec expr ctx e =
