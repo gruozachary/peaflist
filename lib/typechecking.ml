@@ -454,7 +454,44 @@ module W = struct
          let%map s3 = Subst.unify (Tau.apply_sub ~sub:s2 ty') (Tau.TCon ("int", [])) in
          let s' = Subst.compose (Subst.compose (Subst.compose s s1) s2) s3 in
          s', Tau.TCon ("int", []))
-    | Expr.Match (_, _) -> Result.Error "Match typechecking not implemented"
+    | Expr.Match (o, arms) ->
+      let%bind s_opr, t_opr = expr ctx o in
+      let%bind s, ts =
+        List.fold
+          ~init:(Result.Ok (s_opr, []))
+          arms
+          ~f:(fun acc (p, e) ->
+            let%bind s, ts = acc in
+            let%bind s_pat, g, t_pat = pat ctx p in
+            let s = Subst.compose s s_pat in
+            let%bind s =
+              Subst.unify (Tau.apply_sub ~sub:s t_pat) (Tau.apply_sub ~sub:s t_opr)
+            in
+            let ctx =
+              Ctx.Env.map
+                ctx
+                ~f:
+                  (Gamma.merge g ~f:(fun ~key:_ m ->
+                     match m with
+                     | `Left x -> Option.Some x
+                     | `Right x -> Option.Some x
+                     | `Both (_, r) -> Option.Some r))
+            in
+            let%map s_exp, t_exp = expr ctx e in
+            Subst.compose s s_exp, t_exp :: ts)
+      in
+      let%bind t, ts =
+        match ts with
+        | [] -> Result.Error "Cannot have no match arms"
+        | t :: ts -> Result.Ok (t, ts)
+      in
+      List.fold
+        ~init:(Result.Ok (s, Tau.apply_sub ~sub:s t))
+        ~f:(fun acc t ->
+          let%bind s, t_acc = acc in
+          let%map s = Subst.unify t_acc (Tau.apply_sub ~sub:s t) in
+          s, Tau.apply_sub ~sub:s t_acc)
+        ts
     | Expr.Tuple es ->
       let%map s, tys =
         List.fold
