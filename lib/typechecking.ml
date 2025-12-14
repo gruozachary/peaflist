@@ -186,7 +186,6 @@ and Subst : sig
   type t = (Tvar.t, Tau.t, Tvar.comparator_witness) Map.t
 
   val empty : t
-  val add : t -> tv:Tvar.t -> ty:Tau.t -> (t, string) Result.t
   val compose : t -> t -> t
   val unify : Tau.t -> Tau.t -> (t, string) Result.t
 end = struct
@@ -284,8 +283,6 @@ module State = struct
   let fresh s = Tau.TVar (fresh_tv s)
 end
 
-type error = string
-
 module Ctx : sig
   type t
 
@@ -303,7 +300,6 @@ module Ctx : sig
 
   module State : sig
     val get : t -> State.t
-    val map : t -> f:(State.t -> State.t) -> t
   end
 end = struct
   type t =
@@ -326,7 +322,6 @@ end = struct
 
   module State = struct
     let get ctx = ctx.state
-    let map ctx ~f = { ctx with state = f ctx.state }
   end
 end
 
@@ -507,50 +502,53 @@ module W = struct
   ;;
 end
 
-let typecheck =
+let typecheck_expr ctx e = W.expr ctx e |> Result.map ~f:(fun (_, t) -> t)
+
+let typecheck_val_decl ctx x e =
   let open Result.Let_syntax in
-  let rec go ctx = function
-    | ValDecl (x, e) :: ds ->
-      let%bind s, ty = W.expr ctx e in
-      let ctx = Ctx.Env.map ctx ~f:(Gamma.apply_sub ~sub:s) in
-      let sc = W.generalise ctx ty in
-      let ctx = Ctx.Env.map ctx ~f:(Gamma.introduce ~id:x ~sc) in
-      go ctx ds
-    | TypeDecl (x, utvs, ctors) :: ds ->
-      let arity = List.length utvs in
-      let get_tvs () =
-        match
-          Map.of_alist
-            (module String)
-            (List.map ~f:(fun tv -> tv, Ctx.State.get ctx |> State.fresh_tv) utvs)
-        with
-        | `Ok x -> Result.Ok x
-        | `Duplicate_key _ -> Result.Error "Duplicate type variable"
-      in
-      let ctx = Ctx.Tenv.map ctx ~f:(TyEnv.introduce ~id:x ~arity) in
-      let%bind ctx'' =
-        List.fold
-          ~init:(Result.Ok ctx)
-          ~f:(fun ctx_opt (y, t_opt) ->
-            let%bind ctx = ctx_opt in
-            let%map tv_map = get_tvs () in
-            let tvs = Map.data tv_map in
-            let tyvs = List.map ~f:(fun tv -> Tau.TVar tv) tvs in
-            Ctx.Env.map
-              ctx
-              ~f:
-                (Gamma.introduce
-                   ~id:y
-                   ~sc:
-                     (match t_opt with
-                      | Option.Some t ->
-                        Scheme.Forall
-                          (tvs, Tau.TFun (Tau.of_ty ~vm:tv_map t, Tau.TCon (x, tyvs)))
-                      | Option.None -> Scheme.Forall (tvs, Tau.TCon (x, tyvs)))))
-          ctors
-      in
-      go ctx'' ds
-    | [] -> Result.Ok ctx
+  let%map s, ty = W.expr ctx e in
+  let ctx = Ctx.Env.map ctx ~f:(Gamma.apply_sub ~sub:s) in
+  let sc = W.generalise ctx ty in
+  Ctx.Env.map ctx ~f:(Gamma.introduce ~id:x ~sc)
+;;
+
+let typecheck_type_decl ctx x utvs ctors =
+  let open Result.Let_syntax in
+  let arity = List.length utvs in
+  let get_tvs () =
+    match
+      Map.of_alist
+        (module String)
+        (List.map ~f:(fun tv -> tv, Ctx.State.get ctx |> State.fresh_tv) utvs)
+    with
+    | `Ok x -> Result.Ok x
+    | `Duplicate_key _ -> Result.Error "Duplicate type variable"
   in
-  go (Ctx.empty ())
+  let ctx = Ctx.Tenv.map ctx ~f:(TyEnv.introduce ~id:x ~arity) in
+  List.fold ctors ~init:(Result.Ok ctx) ~f:(fun ctx_opt (y, t_opt) ->
+    let%bind ctx = ctx_opt in
+    let%map tv_map = get_tvs () in
+    let tvs = Map.data tv_map in
+    let tyvs = List.map ~f:(fun tv -> Tau.TVar tv) tvs in
+    Ctx.Env.map
+      ctx
+      ~f:
+        (Gamma.introduce
+           ~id:y
+           ~sc:
+             (match t_opt with
+              | Option.Some t ->
+                Scheme.Forall (tvs, Tau.TFun (Tau.of_ty ~vm:tv_map t, Tau.TCon (x, tyvs)))
+              | Option.None -> Scheme.Forall (tvs, Tau.TCon (x, tyvs)))))
+;;
+
+let typecheck_prog ctx ds =
+  let rec go ctx ~ds =
+    match ds with
+    | [] -> Result.Ok ctx
+    | ValDecl (x, e) :: ds -> Result.bind ~f:(go ~ds) (typecheck_val_decl ctx x e)
+    | TypeDecl (x, utvs, ctors) :: ds ->
+      Result.bind ~f:(go ~ds) (typecheck_type_decl ctx x utvs ctors)
+  in
+  go ctx ~ds
 ;;
