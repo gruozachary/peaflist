@@ -21,7 +21,6 @@ module Expr = struct
       | Sub
       | Mul
       | Div
-      | Append
     [@@deriving eq]
   end
 

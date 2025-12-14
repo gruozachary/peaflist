@@ -445,7 +445,6 @@ module W = struct
     | Expr.BinOp (el, o, er) ->
       let open Expr.Bin_op in
       (match o with
-       | Append -> Result.Error "TODO: remove"
        | Div | Mul | Plus | Sub ->
          let%bind s, ty = expr ctx el in
          let ctx = Ctx.Env.map ctx ~f:(Gamma.apply_sub ~sub:s) in
