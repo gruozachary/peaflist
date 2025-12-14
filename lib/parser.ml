@@ -8,24 +8,7 @@ let keywords =
 ;;
 
 let symbols =
-  [ ":="
-  ; "("
-  ; ")"
-  ; ","
-  ; "|"
-  ; "->"
-  ; "*"
-  ; "="
-  ; "{"
-  ; "}"
-  ; "["
-  ; "]"
-  ; "+"
-  ; "-"
-  ; "/"
-  ; "++"
-  ; "'"
-  ]
+  [ ":="; "("; ")"; ","; "|"; "->"; "*"; "="; "{"; "}"; "["; "]"; "+"; "-"; "/"; "'" ]
 ;;
 
 let symbol_trie =
@@ -107,7 +90,7 @@ end
 module Expression : sig
   val parse : unit -> Expr.t t
 end = struct
-  let rec parse () = choice [ binding (); lambda (); matching (); append () ]
+  let rec parse () = choice [ binding (); lambda (); matching (); add () ]
 
   and binding () =
     let%bind _ = attempt (keyword "let") in
@@ -136,12 +119,6 @@ end = struct
          p, e')
     in
     Expr.Match (e, es)
-
-  and append () =
-    chain_right_1
-      (add ())
-      (let%map _ = symbol "++" in
-       fun l r -> Expr.BinOp (l, Expr.Bin_op.Append, r))
 
   and add () =
     chain_left_1
