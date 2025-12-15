@@ -41,5 +41,12 @@
   Uppercase ::= "A" | ... "Z" ;
 *)
 
+val expr : unit -> Ast.Expr.t Peasec.t
+val val_decl : Ast.decl Peasec.t
+(* A peasec parser that parses a val decl *)
+
+val type_decl : Ast.decl Peasec.t
+(* A peasec parser that parses a type decl*)
+
 val prog : Ast.decl list Peasec.t
 (* A peasec parser that parses a Peaflist program  *)
