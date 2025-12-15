@@ -20,8 +20,10 @@ end = struct
   open Peasec
 
   let command =
+    let quit = return Line.CommandKind.Quit
+    and type_of = Parser.Ident.lower >>| fun x -> Line.CommandKind.TypeOf x in
     char ':'
-    >*> choice [ lexeme (char 'q') >*> return Line.CommandKind.Quit ]
+    >*> choice [ lexeme (char 'q') >*> quit; lexeme (char 't') >*> type_of ]
     >>| fun ck -> Line.Command ck
   ;;
 
@@ -46,7 +48,12 @@ let run tl =
     Stdio.print_endline (Tau.to_string ty);
     false
   | Line.Command Line.CommandKind.Quit -> Ok true
-  | _ -> Error "Not implemented"
+  | Line.Command (Line.CommandKind.TypeOf x) ->
+    let%map scheme =
+      Ctx.Env.get tl.env |> Gamma.lookup ~id:x |> of_option ~error:"Unbound identifier"
+    in
+    Stdio.print_endline (Scheme.to_string scheme);
+    false
 ;;
 
 let rec loop () =
