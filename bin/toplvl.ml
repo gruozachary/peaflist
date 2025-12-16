@@ -96,6 +96,41 @@ end
 
 type t = { mutable semantic_ctx : Ctx.t }
 
+let handle_command toplevel_ctx cmd =
+  let open Result in
+  let open Result.Let_syntax in
+  match cmd with
+  | Line.CommandKind.Quit -> Ok true
+  | Line.CommandKind.Help ->
+    List.fold
+      Line.CommandKind.metas
+      ~init:"Command help:"
+      ~f:(fun acc { _name; _description; cmd; _ } ->
+        acc ^ "\n" ^ _name ^ ": " ^ _description ^ " (:" ^ cmd ^ ")")
+    |> Stdio.print_endline;
+    Ok false
+  | Line.CommandKind.TypeOf (Either.First x) ->
+    let%map scheme =
+      Ctx.Env.get toplevel_ctx.semantic_ctx
+      |> Gamma.lookup ~id:x
+      |> of_option ~error:"Unbound variable identifier"
+    in
+    Stdio.print_endline (Scheme.to_string scheme);
+    false
+  | Line.CommandKind.TypeOf (Either.Second e) ->
+    let%map ty = typecheck_expr toplevel_ctx.semantic_ctx e in
+    Stdio.print_endline (Tau.to_string ty);
+    false
+  | Line.CommandKind.TypeInfo x ->
+    let%map arity =
+      Ctx.Tenv.get toplevel_ctx.semantic_ctx
+      |> TyEnv.lookup ~id:x
+      |> of_option ~error:"Unbound type identifier"
+    in
+    Stdio.print_endline ("Arity: " ^ Int.to_string arity);
+    false
+;;
+
 let run toplevel_ctx =
   let open Result in
   let open Result.Let_syntax in
@@ -117,35 +152,7 @@ let run toplevel_ctx =
     let%map ctx = typecheck_type_decl toplevel_ctx.semantic_ctx x utvs ctors in
     toplevel_ctx.semantic_ctx <- ctx;
     false
-  | Line.Command Line.CommandKind.Quit -> Ok true
-  | Line.Command Line.CommandKind.Help ->
-    List.fold
-      Line.CommandKind.metas
-      ~init:"Command help:"
-      ~f:(fun acc { _name; _description; cmd; _ } ->
-        acc ^ "\n" ^ _name ^ ": " ^ _description ^ " (:" ^ cmd ^ ")")
-    |> Stdio.print_endline;
-    Ok false
-  | Line.Command (Line.CommandKind.TypeOf (Either.First x)) ->
-    let%map scheme =
-      Ctx.Env.get toplevel_ctx.semantic_ctx
-      |> Gamma.lookup ~id:x
-      |> of_option ~error:"Unbound variable identifier"
-    in
-    Stdio.print_endline (Scheme.to_string scheme);
-    false
-  | Line.Command (Line.CommandKind.TypeOf (Either.Second e)) ->
-    let%map ty = typecheck_expr toplevel_ctx.semantic_ctx e in
-    Stdio.print_endline (Tau.to_string ty);
-    false
-  | Line.Command (Line.CommandKind.TypeInfo x) ->
-    let%map arity =
-      Ctx.Tenv.get toplevel_ctx.semantic_ctx
-      |> TyEnv.lookup ~id:x
-      |> of_option ~error:"Unbound type identifier"
-    in
-    Stdio.print_endline ("Arity: " ^ Int.to_string arity);
-    false
+  | Line.Command cmd -> handle_command toplevel_ctx cmd
 ;;
 
 let loop () =
