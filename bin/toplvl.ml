@@ -44,9 +44,9 @@ end = struct
   let parse_string = exec (parse () <*< eof)
 end
 
-type t = { mutable env : Ctx.t }
+type t = { mutable semantic_ctx : Ctx.t }
 
-let run tl =
+let run toplevel_ctx =
   let open Result in
   let open Result.Let_syntax in
   let%bind line =
@@ -57,32 +57,32 @@ let run tl =
   in
   match%bind TLParser.parse_string line |> of_option ~error:"Parse of input failed." with
   | Line.Expr e ->
-    let%map _ = typecheck_expr tl.env e in
+    let%map _ = typecheck_expr toplevel_ctx.semantic_ctx e in
     false
   | Line.Decl (Ast.ValDecl (x, e)) ->
-    let%map ctx = typecheck_val_decl tl.env x e in
-    tl.env <- ctx;
+    let%map ctx = typecheck_val_decl toplevel_ctx.semantic_ctx x e in
+    toplevel_ctx.semantic_ctx <- ctx;
     false
   | Line.Decl (Ast.TypeDecl (x, utvs, ctors)) ->
-    let%map ctx = typecheck_type_decl tl.env x utvs ctors in
-    tl.env <- ctx;
+    let%map ctx = typecheck_type_decl toplevel_ctx.semantic_ctx x utvs ctors in
+    toplevel_ctx.semantic_ctx <- ctx;
     false
   | Line.Command Line.CommandKind.Quit -> Ok true
   | Line.Command (Line.CommandKind.TypeOf (Either.First x)) ->
     let%map scheme =
-      Ctx.Env.get tl.env
+      Ctx.Env.get toplevel_ctx.semantic_ctx
       |> Gamma.lookup ~id:x
       |> of_option ~error:"Unbound variable identifier"
     in
     Stdio.print_endline (Scheme.to_string scheme);
     false
   | Line.Command (Line.CommandKind.TypeOf (Either.Second e)) ->
-    let%map ty = typecheck_expr tl.env e in
+    let%map ty = typecheck_expr toplevel_ctx.semantic_ctx e in
     Stdio.print_endline (Tau.to_string ty);
     false
   | Line.Command (Line.CommandKind.TypeInfo x) ->
     let%map arity =
-      Ctx.Tenv.get tl.env
+      Ctx.Tenv.get toplevel_ctx.semantic_ctx
       |> TyEnv.lookup ~id:x
       |> of_option ~error:"Unbound type identifier"
     in
@@ -91,9 +91,9 @@ let run tl =
 ;;
 
 let loop () =
-  let tl = { env = Ctx.empty () } in
+  let toplevel_ctx = { semantic_ctx = Ctx.empty () } in
   let rec go () =
-    match run tl with
+    match run toplevel_ctx with
     | Result.Ok true -> ()
     | Result.Ok false -> go ()
     | Result.Error msg ->
