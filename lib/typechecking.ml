@@ -32,7 +32,7 @@ module rec Tau : sig
   val to_string : t -> string
   val free_tvars : t -> (Tvar.t, Tvar.comparator_witness) Set.t
   val occurs : Tvar.t -> t -> bool
-  val of_ty : vm:(alpha, Tvar.t, String.comparator_witness) Map.t -> Ty.t -> t
+  val of_ty : vm:(alpha, Tvar.t, String.comparator_witness) Map.t -> Ty.t -> t Option.t
   val apply_sub : t -> sub:Subst.t -> t
 end = struct
   type t =
@@ -86,11 +86,22 @@ end = struct
     | TCon (_, ts) -> List.exists ~f:(occurs tvar) ts
   ;;
 
-  let rec of_ty ~vm = function
-    | Ty.Id x -> TVar (Option.value (Map.find vm x) ~default:(assert false))
-    | Ty.Fun (t, t') -> TFun (of_ty ~vm t, of_ty ~vm t')
-    | Ty.Prod ts -> TProd (List.map ~f:(of_ty ~vm) ts)
-    | Ty.App (x, ts) -> TCon (x, List.map ~f:(of_ty ~vm) ts)
+  let rec of_ty ~vm t =
+    let open Option.Let_syntax in
+    match t with
+    | Ty.Id x ->
+      let%map tv = Map.find vm x in
+      TVar tv
+    | Ty.Fun (t, t') ->
+      let%bind ty_l = of_ty ~vm t in
+      let%map ty_r = of_ty ~vm t' in
+      TFun (ty_l, ty_r)
+    | Ty.Prod ts ->
+      let%map tys = Option.all (List.map ~f:(of_ty ~vm) ts) in
+      TProd tys
+    | Ty.App (x, ts) ->
+      let%map tys = Option.all (List.map ~f:(of_ty ~vm) ts) in
+      TCon (x, tys)
   ;;
 
   let rec apply_sub ty ~sub =
@@ -530,16 +541,15 @@ let typecheck_type_decl ctx x utvs ctors =
     let%map tv_map = get_tvs () in
     let tvs = Map.data tv_map in
     let tyvs = List.map ~f:(fun tv -> Tau.TVar tv) tvs in
-    Ctx.Env.map
-      ctx
-      ~f:
-        (Gamma.introduce
-           ~id:y
-           ~sc:
-             (match t_opt with
-              | Option.Some t ->
-                Scheme.Forall (tvs, Tau.TFun (Tau.of_ty ~vm:tv_map t, Tau.TCon (x, tyvs)))
-              | Option.None -> Scheme.Forall (tvs, Tau.TCon (x, tyvs)))))
+    let sc =
+      match t_opt with
+      | Option.Some t ->
+        (match Tau.of_ty ~vm:tv_map t with
+         | Option.Some ty -> Scheme.Forall (tvs, Tau.TFun (ty, Tau.TCon (x, tyvs)))
+         | Option.None -> assert false)
+      | Option.None -> Scheme.Forall (tvs, Tau.TCon (x, tyvs))
+    in
+    Ctx.Env.map ctx ~f:(Gamma.introduce ~id:y ~sc))
 ;;
 
 let typecheck_prog ctx ds =
