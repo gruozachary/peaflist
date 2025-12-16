@@ -6,8 +6,18 @@ module Line : sig
   module CommandKind : sig
     type t =
       | Quit
+      | Help
       | TypeOf of (string, Ast.Expr.t) Either.t
       | TypeInfo of string
+
+    type meta =
+      { _name : string
+      ; _description : string
+      ; cmd : string
+      ; parser : t Peasec.t
+      }
+
+    val metas : meta list
   end
 
   type t =
@@ -20,6 +30,7 @@ end = struct
   module CommandKind = struct
     type t =
       | Quit
+      | Help
       | TypeOf of (string, Ast.Expr.t) Either.t
       | TypeInfo of string
 
@@ -36,6 +47,11 @@ end = struct
         ; _description = "Quits the toplevel."
         ; cmd = "q"
         ; parser = return Quit
+        }
+      ; { _name = "Help"
+        ; _description = "Shows the help command."
+        ; cmd = "h"
+        ; parser = return Help
         }
       ; { _name = "Value type information"
         ; _description = "Gets the type information about a variable."
@@ -102,6 +118,14 @@ let run toplevel_ctx =
     toplevel_ctx.semantic_ctx <- ctx;
     false
   | Line.Command Line.CommandKind.Quit -> Ok true
+  | Line.Command Line.CommandKind.Help ->
+    List.fold
+      Line.CommandKind.metas
+      ~init:"Command help:"
+      ~f:(fun acc { _name; _description; cmd; _ } ->
+        acc ^ "\n" ^ _name ^ ": " ^ _description ^ " (:" ^ cmd ^ ")")
+    |> Stdio.print_endline;
+    Ok false
   | Line.Command (Line.CommandKind.TypeOf (Either.First x)) ->
     let%map scheme =
       Ctx.Env.get toplevel_ctx.semantic_ctx
