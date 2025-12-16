@@ -7,6 +7,7 @@ module Line = struct
     type t =
       | Quit
       | TypeOf of string
+      | TypeInfo of string
   end
 
   type t =
@@ -22,15 +23,21 @@ end = struct
 
   let command =
     let quit = return Line.CommandKind.Quit
-    and type_of = Parser.Ident.lower >>| fun x -> Line.CommandKind.TypeOf x in
+    and type_of = Parser.Ident.lower >>| fun x -> Line.CommandKind.TypeOf x
+    and type_info = Parser.Ident.lower >>| fun x -> Line.CommandKind.TypeInfo x in
     char ':'
-    >*> choice [ lexeme (char 'q') >*> quit; lexeme (char 't') >*> type_of ]
+    >*> choice
+          [ lexeme (char 'q') >*> quit
+          ; lexeme (char 't') >*> type_of
+          ; lexeme (char 'i') >*> type_info
+          ]
     >>| fun ck -> Line.Command ck
   ;;
 
   let expr = Parser.expr () >>| fun e -> Line.Expr e
   let val_decl = Parser.val_decl >>| fun d -> Line.Decl d
-  let parse () = command <|> val_decl <|> expr
+  let type_decl = Parser.type_decl >>| fun d -> Line.Decl d
+  let parse () = command <|> val_decl <|> type_decl <|> expr
   let parse_string = exec (parse () <*< eof)
 end
 
@@ -54,13 +61,26 @@ let run tl =
     let%map ctx = typecheck_val_decl tl.env x e in
     tl.env <- ctx;
     false
-  | Line.Decl (Ast.TypeDecl _) -> Error "TODO: Implement"
+  | Line.Decl (Ast.TypeDecl (x, utvs, ctors)) ->
+    let%map ctx = typecheck_type_decl tl.env x utvs ctors in
+    tl.env <- ctx;
+    false
   | Line.Command Line.CommandKind.Quit -> Ok true
   | Line.Command (Line.CommandKind.TypeOf x) ->
     let%map scheme =
-      Ctx.Env.get tl.env |> Gamma.lookup ~id:x |> of_option ~error:"Unbound identifier"
+      Ctx.Env.get tl.env
+      |> Gamma.lookup ~id:x
+      |> of_option ~error:"Unbound variable identifier"
     in
     Stdio.print_endline (Scheme.to_string scheme);
+    false
+  | Line.Command (Line.CommandKind.TypeInfo x) ->
+    let%map arity =
+      Ctx.Tenv.get tl.env
+      |> TyEnv.lookup ~id:x
+      |> of_option ~error:"Unbound type identifier"
+    in
+    Stdio.print_endline ("Arity: " ^ Int.to_string arity);
     false
 ;;
 
