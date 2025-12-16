@@ -6,7 +6,7 @@ module Line = struct
   module CommandKind = struct
     type t =
       | Quit
-      | TypeOf of string
+      | TypeOf of (string, Ast.Expr.t) Either.t
       | TypeInfo of string
   end
 
@@ -23,7 +23,10 @@ end = struct
 
   let command =
     let quit = return Line.CommandKind.Quit
-    and type_of = Parser.Ident.lower >>| fun x -> Line.CommandKind.TypeOf x
+    and type_of =
+      attempt (Parser.Ident.lower <*< eof >>| fun x -> Either.First x)
+      <|> (Parser.expr () >>| fun e -> Either.Second e)
+      >>| fun e -> Line.CommandKind.TypeOf e
     and type_info = Parser.Ident.lower >>| fun x -> Line.CommandKind.TypeInfo x in
     char ':'
     >*> choice
@@ -54,8 +57,7 @@ let run tl =
   in
   match%bind TLParser.parse_string line |> of_option ~error:"Parse of input failed." with
   | Line.Expr e ->
-    let%map ty = typecheck_expr tl.env e in
-    Stdio.print_endline (Tau.to_string ty);
+    let%map _ = typecheck_expr tl.env e in
     false
   | Line.Decl (Ast.ValDecl (x, e)) ->
     let%map ctx = typecheck_val_decl tl.env x e in
@@ -66,13 +68,17 @@ let run tl =
     tl.env <- ctx;
     false
   | Line.Command Line.CommandKind.Quit -> Ok true
-  | Line.Command (Line.CommandKind.TypeOf x) ->
+  | Line.Command (Line.CommandKind.TypeOf (Either.First x)) ->
     let%map scheme =
       Ctx.Env.get tl.env
       |> Gamma.lookup ~id:x
       |> of_option ~error:"Unbound variable identifier"
     in
     Stdio.print_endline (Scheme.to_string scheme);
+    false
+  | Line.Command (Line.CommandKind.TypeOf (Either.Second e)) ->
+    let%map ty = typecheck_expr tl.env e in
+    Stdio.print_endline (Tau.to_string ty);
     false
   | Line.Command (Line.CommandKind.TypeInfo x) ->
     let%map arity =
