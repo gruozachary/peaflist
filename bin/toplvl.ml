@@ -2,8 +2,8 @@ open! Base
 open Sqc
 open Typechecking
 
-module Line = struct
-  module CommandKind = struct
+module Line : sig
+  module CommandKind : sig
     type t =
       | Quit
       | TypeOf of (string, Ast.Expr.t) Either.t
@@ -14,34 +14,68 @@ module Line = struct
     | Expr of Ast.Expr.t
     | Decl of Ast.decl
     | Command of CommandKind.t
-end
 
-module TLParser : sig
-  val parse_string : string -> Line.t Option.t
+  val parse : string -> t Option.t
 end = struct
-  open Peasec
+  module CommandKind = struct
+    type t =
+      | Quit
+      | TypeOf of (string, Ast.Expr.t) Either.t
+      | TypeInfo of string
 
-  let command =
-    let quit = return Line.CommandKind.Quit
-    and type_of =
-      attempt (Parser.Ident.lower <*< eof >>| fun x -> Either.First x)
-      <|> (Parser.expr () >>| fun e -> Either.Second e)
-      >>| fun e -> Line.CommandKind.TypeOf e
-    and type_info = Parser.Ident.lower >>| fun x -> Line.CommandKind.TypeInfo x in
-    char ':'
-    >*> choice
-          [ lexeme (char 'q') >*> quit
-          ; lexeme (char 't') >*> type_of
-          ; lexeme (char 'i') >*> type_info
-          ]
-    >>| fun ck -> Line.Command ck
+    type meta =
+      { _name : string
+      ; _description : string
+      ; cmd : string
+      ; parser : t Peasec.t
+      }
+
+    let metas =
+      let open Peasec in
+      [ { _name = "Quit"
+        ; _description = "Quits the toplevel."
+        ; cmd = "q"
+        ; parser = return Quit
+        }
+      ; { _name = "Value type information"
+        ; _description = "Gets the type information about a variable."
+        ; cmd = "t"
+        ; parser =
+            (attempt (Parser.Ident.lower <*< eof >>| fun x -> Either.First x)
+             <|> (Parser.expr () >>| fun e -> Either.Second e)
+             >>| fun e -> TypeOf e)
+        }
+      ; { _name = "Type definition information"
+        ; _description = "Get the information about a type definition."
+        ; cmd = "i"
+        ; parser = (Parser.Ident.lower >>| fun x -> TypeInfo x)
+        }
+      ]
+    ;;
+
+    let parser =
+      let open Peasec in
+      char ':'
+      >*> (List.map metas ~f:(fun { cmd; parser; _ } -> lexeme (string cmd) >*> parser)
+           |> choice)
+    ;;
+  end
+
+  type t =
+    | Expr of Ast.Expr.t
+    | Decl of Ast.decl
+    | Command of CommandKind.t
+
+  let parser =
+    let open Peasec in
+    let expr = Parser.expr () >>| fun e -> Expr e
+    and command = CommandKind.parser >>| fun c -> Command c
+    and val_decl = Parser.val_decl >>| fun d -> Decl d
+    and type_decl = Parser.type_decl >>| fun d -> Decl d in
+    command <|> val_decl <|> type_decl <|> expr
   ;;
 
-  let expr = Parser.expr () >>| fun e -> Line.Expr e
-  let val_decl = Parser.val_decl >>| fun d -> Line.Decl d
-  let type_decl = Parser.type_decl >>| fun d -> Line.Decl d
-  let parse () = command <|> val_decl <|> type_decl <|> expr
-  let parse_string = exec (parse () <*< eof)
+  let parse = Peasec.exec parser
 end
 
 type t = { mutable semantic_ctx : Ctx.t }
@@ -55,7 +89,7 @@ let run toplevel_ctx =
     Stdio.In_channel.input_line ~fix_win_eol:true Stdio.stdin
     |> of_option ~error:"Failed to take input."
   in
-  match%bind TLParser.parse_string line |> of_option ~error:"Parse of input failed." with
+  match%bind Line.parse line |> of_option ~error:"Parse of input failed." with
   | Line.Expr e ->
     let%map _ = typecheck_expr toplevel_ctx.semantic_ctx e in
     false
