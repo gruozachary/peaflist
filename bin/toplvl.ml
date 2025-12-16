@@ -11,6 +11,7 @@ module Line = struct
 
   type t =
     | Expr of Ast.Expr.t
+    | Decl of Ast.decl
     | Command of CommandKind.t
 end
 
@@ -27,7 +28,9 @@ end = struct
     >>| fun ck -> Line.Command ck
   ;;
 
-  let parse () = command <|> (Parser.expr () >>| fun e -> Line.Expr e)
+  let expr = Parser.expr () >>| fun e -> Line.Expr e
+  let val_decl = Parser.val_decl >>| fun d -> Line.Decl d
+  let parse () = command <|> val_decl <|> expr
   let parse_string = exec (parse () <*< eof)
 end
 
@@ -47,6 +50,11 @@ let run tl =
     let%map ty = typecheck_expr tl.env e in
     Stdio.print_endline (Tau.to_string ty);
     false
+  | Line.Decl (Ast.ValDecl (x, e)) ->
+    let%map ctx = typecheck_val_decl tl.env x e in
+    tl.env <- ctx;
+    false
+  | Line.Decl (Ast.TypeDecl _) -> Error "TODO: Implement"
   | Line.Command Line.CommandKind.Quit -> Ok true
   | Line.Command (Line.CommandKind.TypeOf x) ->
     let%map scheme =
@@ -56,12 +64,15 @@ let run tl =
     false
 ;;
 
-let rec loop () =
+let loop () =
   let tl = { env = Ctx.empty () } in
-  match run tl with
-  | Result.Ok true -> ()
-  | Result.Ok false -> loop ()
-  | Result.Error msg ->
-    Stdio.print_endline ("Error: " ^ msg);
-    loop ()
+  let rec go () =
+    match run tl with
+    | Result.Ok true -> ()
+    | Result.Ok false -> go ()
+    | Result.Error msg ->
+      Stdio.print_endline ("Error: " ^ msg);
+      go ()
+  in
+  go ()
 ;;
