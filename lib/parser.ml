@@ -192,6 +192,8 @@ end = struct
   ;;
 end
 
+let expr = Expression.parse
+
 let val_decl =
   let%bind _ = keyword "vd" in
   let%bind x = Ident.lower in

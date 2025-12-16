@@ -41,5 +41,30 @@
   Uppercase ::= "A" | ... "Z" ;
 *)
 
+(* A module that contains parsers for identifiers *)
+module Ident : sig
+  (* A parser for an identifier that starts with lowercase *)
+  val lower : string Peasec.t
+
+  (* A parser for an identifier that starts with uppercase *)
+  val upper : string Peasec.t
+
+  (* A parser for an identifier that starts with a dash (') *)
+  val dash : string Peasec.t
+
+  (* A parser for an identifier for a type *)
+  val ty : string Peasec.t
+
+  (* A parser for a identifier character *)
+  val char : char Peasec.t
+end
+
+val expr : unit -> Ast.Expr.t Peasec.t
+val val_decl : Ast.decl Peasec.t
+(* A peasec parser that parses a val decl *)
+
+val type_decl : Ast.decl Peasec.t
+(* A peasec parser that parses a type decl*)
+
 val prog : Ast.decl list Peasec.t
 (* A peasec parser that parses a Peaflist program  *)

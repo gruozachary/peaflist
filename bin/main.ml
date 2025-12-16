@@ -1,3 +1,3 @@
 open! Base
 
-let () = Stdio.print_endline "Hello, world!"
+let () = Toplvl.loop ()
