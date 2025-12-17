@@ -469,9 +469,10 @@ module W = struct
             let%bind s, ts = acc in
             let%bind s_pat, g, t_pat = pat ctx p in
             let s = Subst.compose s s_pat in
-            let%bind s =
+            let%bind s_uni =
               Subst.unify (Tau.apply_sub ~sub:s t_pat) (Tau.apply_sub ~sub:s t_opr)
             in
+            let s = Subst.compose s s_uni in
             let ctx =
               Ctx.Env.map
                 ctx
@@ -494,7 +495,8 @@ module W = struct
         ~init:(Result.Ok (s, Tau.apply_sub ~sub:s t))
         ~f:(fun acc t ->
           let%bind s, t_acc = acc in
-          let%map s = Subst.unify t_acc (Tau.apply_sub ~sub:s t) in
+          let%map s_uni = Subst.unify t_acc (Tau.apply_sub ~sub:s t) in
+          let s = Subst.compose s s_uni in
           s, Tau.apply_sub ~sub:s t_acc)
         ts
     | Expr.Tuple es ->
