@@ -142,7 +142,9 @@ let run toplevel_ctx =
   in
   match%bind Line.parse line |> of_option ~error:"Parse of input failed." with
   | Line.Expr e ->
-    let%map _ = typecheck_expr toplevel_ctx.semantic_ctx e in
+    let%bind _ = typecheck_expr toplevel_ctx.semantic_ctx e in
+    let%map v = Interpreter.eval ~env:Interpreter.Env.empty e in
+    Stdio.print_endline (Interpreter.Value.to_string v);
     false
   | Line.Decl (Ast.ValDecl (x, e)) ->
     let%map ctx = typecheck_val_decl toplevel_ctx.semantic_ctx x e in
