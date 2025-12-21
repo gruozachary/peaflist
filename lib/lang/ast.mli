@@ -2,12 +2,18 @@ type id = string
 type ty_id = string
 type ty_var = string
 
+val equal_id : id -> id -> bool
+val equal_ty_id : ty_id -> ty_id -> bool
+val equal_ty_var : ty_var -> ty_var -> bool
+
 module Pat : sig
   type t =
     | Int of int
     | Ident of id
     | Tuple of t list
     | CtorApp of id * t Option.t
+
+  val equal : t -> t -> bool
 end
 
 module Expr : sig
@@ -17,6 +23,8 @@ module Expr : sig
       | Sub
       | Mul
       | Div
+
+    val equal : t -> t -> bool
   end
 
   type t =
@@ -32,6 +40,7 @@ module Expr : sig
     | BinOp of t * Bin_op.t * t
 
   val typecheck : Ctx.t -> t -> (Tau.t, string) Result.t
+  val equal : t -> t -> bool
 end
 
 module Ty : sig
@@ -40,6 +49,8 @@ module Ty : sig
     | App of id * t list
     | Prod of t list
     | Fun of t * t
+
+  val equal : t -> t -> bool
 end
 
 module Decl : sig
@@ -48,10 +59,12 @@ module Decl : sig
     | TypeDecl of id * ty_var list * (id * Ty.t option) list
 
   val typecheck : Ctx.t -> t -> (Ctx.t, string) Result.t
+  val equal : t -> t -> bool
 end
 
 module Prog : sig
   type t = Decl.t list
 
   val typecheck : Ctx.t -> t -> (Ctx.t, string) Result.t
+  val equal : t -> t -> bool
 end

@@ -1,8 +1,8 @@
 open! Base
 
-type id = string
-type ty_id = string
-type ty_var = string
+type id = string [@@deriving eq]
+type ty_id = string [@@deriving eq]
+type ty_var = string [@@deriving eq]
 
 let instantiate ctx = function
   | Scheme.Forall (qs, ty) ->
@@ -37,6 +37,7 @@ module Pat = struct
     | Ident of id
     | Tuple of t list
     | CtorApp of id * t Option.t
+  [@@deriving eq]
 
   let rec infer ctx p =
     let open Result.Let_syntax in
@@ -95,6 +96,7 @@ module Expr = struct
       | Sub
       | Mul
       | Div
+    [@@deriving eq]
   end
 
   type t =
@@ -108,6 +110,7 @@ module Expr = struct
     | Match of t * (Pat.t * t) list
     | Tuple of t list
     | BinOp of t * Bin_op.t * t
+  [@@deriving eq]
 
   let rec infer ctx e =
     let open Result.Let_syntax in
@@ -219,6 +222,7 @@ module Ty = struct
     | App of id * t list
     | Prod of t list
     | Fun of t * t
+  [@@deriving eq]
 
   let rec to_tau ~vm t =
     let open Option.Let_syntax in
@@ -243,6 +247,7 @@ module Decl = struct
   type t =
     | ValDecl of id * Expr.t
     | TypeDecl of id * ty_var list * (id * Ty.t option) list
+  [@@deriving eq]
 
   let typecheck ctx d =
     let open Result.Let_syntax in
@@ -282,7 +287,7 @@ module Decl = struct
 end
 
 module Prog = struct
-  type t = Decl.t list
+  type t = Decl.t list [@@deriving eq]
 
   let typecheck ctx ds =
     let open Result in
