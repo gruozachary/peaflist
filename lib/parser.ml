@@ -1,7 +1,7 @@
 open! Base
 open Peasec
 open Let_syntax
-open Ast
+open Lang.Ast
 
 let keywords =
   Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td"; "of"; "with" ]
@@ -65,7 +65,7 @@ end
 let keyword (s : string) : unit t = lexeme (string s >*> not_followed_by Ident.char)
 
 (* TODO: this will result on a horrible disaster if there are too many digits *)
-let int : Ast.int t = lexeme (some digit >>| String.of_char_list >>| Int.of_string)
+let int : int t = lexeme (some digit >>| String.of_char_list >>| Int.of_string)
 let tuple p = between ~l:(symbol "(") ~r:(symbol ")") (sep_by ~sep:(symbol ",") p)
 let tuple_1 p = between ~l:(symbol "(") ~r:(symbol ")") (sep_by_1 ~sep:(symbol ",") p)
 
@@ -199,7 +199,7 @@ let val_decl =
   let%bind x = Ident.lower in
   let%bind _ = symbol ":=" in
   let%map e = Expression.parse () in
-  ValDecl (x, e)
+  Decl.ValDecl (x, e)
 ;;
 
 let type_decl =
@@ -216,7 +216,7 @@ let type_decl =
        in
        y, t)
   in
-  Ast.TypeDecl (x, tvs, ts)
+  Decl.TypeDecl (x, tvs, ts)
 ;;
 
 let prog =

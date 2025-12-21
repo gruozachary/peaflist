@@ -1,9 +1,9 @@
 open! Base
-open! Sqc.Ast
+open! Lang.Ast
 
 type program_bundle =
   { str : string
-  ; ast : prog
+  ; ast : Prog.t
   }
 
 let empty = { str = ""; ast = [] }
@@ -11,7 +11,7 @@ let empty = { str = ""; ast = [] }
 let val_declaration =
   { str = "vd double := fun x -> x * x"
   ; ast =
-      [ ValDecl
+      [ Decl.ValDecl
           ( "double"
           , Expr.Lambda ("x", Expr.BinOp (Expr.Id "x", Expr.Bin_op.Mul, Expr.Id "x")) )
       ]
@@ -21,7 +21,7 @@ let val_declaration =
 let val_declaration_crazy_whitespace =
   { str = "     vd     double:=          fun                   x->x*         x"
   ; ast =
-      [ ValDecl
+      [ Decl.ValDecl
           ( "double"
           , Expr.Lambda ("x", Expr.BinOp (Expr.Id "x", Expr.Bin_op.Mul, Expr.Id "x")) )
       ]
@@ -58,7 +58,7 @@ vd length := fun l ->
           , [ "Cons", Some (Ty.Prod [ Ty.Id "'a"; Ty.App ("list", [ Ty.Id "'a" ]) ])
             ; "Nil", None
             ] )
-      ; ValDecl
+      ; Decl.ValDecl
           ( "length"
           , Expr.Lambda
               ( "l"

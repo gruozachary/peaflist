@@ -1,27 +1,22 @@
-open! Base
+type id = string
+type ty_id = string
+type ty_var = string
 
-type nonrec int = int
-type id = string [@@deriving eq]
-type ty_id = string [@@deriving eq]
-type ty_var = string [@@deriving eq]
-
-module Pat = struct
+module Pat : sig
   type t =
     | Int of int
     | Ident of id
     | Tuple of t list
     | CtorApp of id * t Option.t
-  [@@deriving eq]
 end
 
-module Expr = struct
-  module Bin_op = struct
+module Expr : sig
+  module Bin_op : sig
     type t =
       | Plus
       | Sub
       | Mul
       | Div
-    [@@deriving eq]
   end
 
   type t =
@@ -35,21 +30,28 @@ module Expr = struct
     | Match of t * (Pat.t * t) list
     | Tuple of t list
     | BinOp of t * Bin_op.t * t
-  [@@deriving eq]
+
+  val typecheck : Ctx.t -> t -> (Tau.t, string) Result.t
 end
 
-module Ty = struct
+module Ty : sig
   type t =
     | Id of id
     | App of id * t list
     | Prod of t list
     | Fun of t * t
-  [@@deriving eq]
 end
 
-type decl =
-  | ValDecl of id * Expr.t
-  | TypeDecl of id * ty_var list * (id * Ty.t option) list
-[@@deriving eq]
+module Decl : sig
+  type t =
+    | ValDecl of id * Expr.t
+    | TypeDecl of id * ty_var list * (id * Ty.t option) list
 
-type prog = decl list [@@deriving eq]
+  val typecheck : Ctx.t -> t -> (Ctx.t, string) Result.t
+end
+
+module Prog : sig
+  type t = Decl.t list
+
+  val typecheck : Ctx.t -> t -> (Ctx.t, string) Result.t
+end

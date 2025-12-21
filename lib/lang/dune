@@ -1,0 +1,5 @@
+(library
+ (name lang)
+ (libraries base)
+ (preprocess
+  (pps ppx_let ppx_compare ppx_sexp_conv)))
