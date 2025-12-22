@@ -10,4 +10,4 @@ let fresh_tv s =
   Tvar.of_int v
 ;;
 
-let fresh s = Tau.TVar (fresh_tv s)
+let fresh s = Type.TVar (fresh_tv s)

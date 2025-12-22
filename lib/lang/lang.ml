@@ -27,12 +27,12 @@ module type Scheme_pub = sig
   end
   with type t = Scheme.t
 
-module type Tau_pub = sig
+module type Type_pub = sig
     type t
 
     val to_string : t -> string
   end
-  with type t = Tau.t
+  with type t = Type.t
 
 module type Ty_env_pub = sig
     type t
@@ -46,5 +46,5 @@ module Raw = Raw
 module Term_env : Term_env_pub = Term_env
 module Ctx : Ctx_pub = Ctx
 module Scheme : Scheme_pub = Scheme
-module Tau : Tau_pub = Tau
+module Type : Type_pub = Type
 module Ty_env : Ty_env_pub = Ty_env

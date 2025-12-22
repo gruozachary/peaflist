@@ -14,20 +14,20 @@ let instantiate ctx = function
     in
     let rec replace sub ty =
       match ty with
-      | Tau.TVar tv ->
+      | Type.TVar tv ->
         (match Map.find sub tv with
-         | Some tv' -> Tau.TVar tv'
+         | Some tv' -> Type.TVar tv'
          | None -> ty)
-      | Tau.TFun (ty0, ty1) -> TFun (replace sub ty0, replace sub ty1)
-      | Tau.TProd tys -> TProd (List.map tys ~f:(replace sub))
-      | Tau.TCon (tvar, tys) -> TCon (tvar, List.map tys ~f:(replace sub))
+      | Type.TFun (ty0, ty1) -> TFun (replace sub ty0, replace sub ty1)
+      | Type.TProd tys -> TProd (List.map tys ~f:(replace sub))
+      | Type.TCon (tvar, tys) -> TCon (tvar, List.map tys ~f:(replace sub))
     in
     replace sub ty
 ;;
 
 let generalise ctx ty =
   let env_tvs = Ctx.Env.get ctx |> Term_env.free_tvars in
-  let ty_tvs = Tau.free_tvars ty in
+  let ty_tvs = Type.free_tvars ty in
   Scheme.Forall (Set.diff ty_tvs env_tvs |> Set.to_list, ty)
 ;;
 
@@ -49,21 +49,21 @@ module Pat = struct
           (Option.map (Ctx.Env.get ctx |> Term_env.lookup ~id:x) ~f:(instantiate ctx))
       in
       (match t, po with
-       | Tau.TFun _, Option.Some p ->
+       | Type.TFun _, Option.Some p ->
          let%bind s, g, t' = infer ctx p in
          let t'' = Ctx.State.get ctx |> State.fresh in
-         let%map s' = Subst.unify (Tau.TFun (t', t'')) t in
+         let%map s' = Subst.unify (Type.TFun (t', t'')) t in
          let s'' = Subst.compose s s' in
          s'', g, Subst.apply_type ~sub:s'' t''
-       | Tau.TCon _, Option.None -> Result.Ok (Subst.empty, Term_env.empty (), t)
+       | Type.TCon _, Option.None -> Result.Ok (Subst.empty, Term_env.empty (), t)
        | _ -> Result.Error "Constructor arity mismatch in pattern")
     | Ident x ->
       let t = Ctx.State.get ctx |> State.fresh in
       Result.Ok
         ( Subst.empty
-        , Term_env.introduce ~id:x ~sc:(Scheme.of_tau t) (Term_env.empty ())
+        , Term_env.introduce ~id:x ~sc:(Scheme.of_type t) (Term_env.empty ())
         , t )
-    | Int _ -> Result.Ok (Subst.empty, Term_env.empty (), Tau.TCon ("int", []))
+    | Int _ -> Result.Ok (Subst.empty, Term_env.empty (), Type.TCon ("int", []))
     | Tuple ps ->
       let%map s, g, ts =
         List.fold
@@ -87,7 +87,7 @@ module Pat = struct
             Subst.compose s s', g'', t :: List.map ~f:(Subst.apply_type ~sub:s') ts)
           ps
       in
-      s, g, Tau.TProd (List.rev ts)
+      s, g, Type.TProd (List.rev ts)
   ;;
 end
 
@@ -131,15 +131,15 @@ module Expr = struct
        | Option.None -> Result.Error "Unbound constructor")
     | Lambda (x, e) ->
       let ty = Ctx.State.get ctx |> State.fresh in
-      let ctx = Ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc:(Scheme.of_tau ty)) in
+      let ctx = Ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc:(Scheme.of_type ty)) in
       let%map s, ty' = infer ctx e in
-      s, Tau.TFun (Subst.apply_type ~sub:s ty, Subst.apply_type ~sub:s ty')
+      s, Type.TFun (Subst.apply_type ~sub:s ty, Subst.apply_type ~sub:s ty')
     | Apply (ef, e) ->
       let%bind s, tyf = infer ctx ef in
       let ctx = Ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
       let%bind s', ty = infer ctx e in
       let tyv = Ctx.State.get ctx |> State.fresh in
-      let%map s'' = Subst.unify (Subst.apply_type ~sub:s' tyf) (Tau.TFun (ty, tyv)) in
+      let%map s'' = Subst.unify (Subst.apply_type ~sub:s' tyf) (Type.TFun (ty, tyv)) in
       Subst.compose (Subst.compose s s') s'', Subst.apply_type ~sub:s'' tyv
     | Binding (x, e, e') ->
       let%bind s, ty = infer ctx e in
@@ -148,7 +148,7 @@ module Expr = struct
       let%map s', ty' = infer (Ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc)) e' in
       Subst.compose s s', ty'
     | Group e -> infer ctx e
-    | Int _ -> Result.Ok (Subst.empty, Tau.TCon ("int", []))
+    | Int _ -> Result.Ok (Subst.empty, Type.TCon ("int", []))
     | BinOp (el, o, er) ->
       let open Bin_op in
       (match o with
@@ -156,10 +156,14 @@ module Expr = struct
          let%bind s, ty = infer ctx el in
          let ctx = Ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
          let%bind s1, ty' = infer ctx er in
-         let%bind s2 = Subst.unify (Subst.apply_type ~sub:s1 ty) (Tau.TCon ("int", [])) in
-         let%map s3 = Subst.unify (Subst.apply_type ~sub:s2 ty') (Tau.TCon ("int", [])) in
+         let%bind s2 =
+           Subst.unify (Subst.apply_type ~sub:s1 ty) (Type.TCon ("int", []))
+         in
+         let%map s3 =
+           Subst.unify (Subst.apply_type ~sub:s2 ty') (Type.TCon ("int", []))
+         in
          let s' = Subst.compose (Subst.compose (Subst.compose s s1) s2) s3 in
-         s', Tau.TCon ("int", []))
+         s', Type.TCon ("int", []))
     | Match (o, arms) ->
       let%bind s_opr, t_opr = infer ctx o in
       let%bind s, ts =
@@ -212,7 +216,7 @@ module Expr = struct
           es
       in
       let tys = List.map ~f:(Subst.apply_type ~sub:s) tys in
-      s, Tau.TProd (List.rev tys)
+      s, Type.TProd (List.rev tys)
   ;;
 
   let typecheck ctx e = infer ctx e |> Result.map ~f:(fun (_, t) -> t)
@@ -226,22 +230,22 @@ module Ty = struct
     | Fun of t * t
   [@@deriving eq]
 
-  let rec to_tau ~vm t =
+  let rec to_type ~vm t =
     let open Option.Let_syntax in
     match t with
     | Id x ->
       let%map tv = Map.find vm x in
-      Tau.TVar tv
+      Type.TVar tv
     | Fun (t, t') ->
-      let%bind ty_l = to_tau ~vm t in
-      let%map ty_r = to_tau ~vm t' in
-      Tau.TFun (ty_l, ty_r)
+      let%bind ty_l = to_type ~vm t in
+      let%map ty_r = to_type ~vm t' in
+      Type.TFun (ty_l, ty_r)
     | Prod ts ->
-      let%map tys = Option.all (List.map ~f:(to_tau ~vm) ts) in
-      Tau.TProd tys
+      let%map tys = Option.all (List.map ~f:(to_type ~vm) ts) in
+      Type.TProd tys
     | App (x, ts) ->
-      let%map tys = Option.all (List.map ~f:(to_tau ~vm) ts) in
-      Tau.TCon (x, tys)
+      let%map tys = Option.all (List.map ~f:(to_type ~vm) ts) in
+      Type.TCon (x, tys)
   ;;
 end
 
@@ -275,14 +279,14 @@ module Decl = struct
         let%bind ctx = ctx_opt in
         let%map tv_map = get_tvs () in
         let tvs = Map.data tv_map in
-        let tyvs = List.map ~f:(fun tv -> Tau.TVar tv) tvs in
+        let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
         let sc =
           match t_opt with
           | Option.Some t ->
-            (match Ty.to_tau ~vm:tv_map t with
-             | Option.Some ty -> Scheme.Forall (tvs, Tau.TFun (ty, Tau.TCon (x, tyvs)))
+            (match Ty.to_type ~vm:tv_map t with
+             | Option.Some ty -> Scheme.Forall (tvs, Type.TFun (ty, Type.TCon (x, tyvs)))
              | Option.None -> assert false)
-          | Option.None -> Scheme.Forall (tvs, Tau.TCon (x, tyvs))
+          | Option.None -> Scheme.Forall (tvs, Type.TCon (x, tyvs))
         in
         Ctx.Env.map ctx ~f:(Term_env.introduce ~id:y ~sc))
   ;;
