@@ -10,7 +10,7 @@ let instantiate ctx = function
       List.fold
         ~init:(Map.empty (module Type_var))
         ~f:(fun acc key ->
-          Map.set acc ~key ~data:(Analyser_ctx.State.get ctx |> State.fresh_tv))
+          Map.set acc ~key ~data:(Analyser_ctx.State.get ctx |> Analyser_state.fresh_tv))
         qs
     in
     let rec replace sub ty =
@@ -54,14 +54,14 @@ module Pat = struct
       (match t, po with
        | Type.TFun _, Option.Some p ->
          let%bind s, g, t' = infer ctx p in
-         let t'' = Analyser_ctx.State.get ctx |> State.fresh in
+         let t'' = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
          let%map s' = Subst.unify (Type.TFun (t', t'')) t in
          let s'' = Subst.compose s s' in
          s'', g, Subst.apply_type ~sub:s'' t''
        | Type.TCon _, Option.None -> Result.Ok (Subst.empty, Term_env.empty (), t)
        | _ -> Result.Error "Constructor arity mismatch in pattern")
     | Ident x ->
-      let t = Analyser_ctx.State.get ctx |> State.fresh in
+      let t = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       Result.Ok
         ( Subst.empty
         , Term_env.introduce ~id:x ~sc:(Scheme.of_type t) (Term_env.empty ())
@@ -133,7 +133,7 @@ module Expr = struct
          Result.Ok (Subst.empty, ty)
        | Option.None -> Result.Error "Unbound constructor")
     | Lambda (x, e) ->
-      let ty = Analyser_ctx.State.get ctx |> State.fresh in
+      let ty = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let ctx =
         Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc:(Scheme.of_type ty))
       in
@@ -143,7 +143,7 @@ module Expr = struct
       let%bind s, tyf = infer ctx ef in
       let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
       let%bind s', ty = infer ctx e in
-      let tyv = Analyser_ctx.State.get ctx |> State.fresh in
+      let tyv = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let%map s'' = Subst.unify (Subst.apply_type ~sub:s' tyf) (Type.TFun (ty, tyv)) in
       Subst.compose (Subst.compose s s') s'', Subst.apply_type ~sub:s'' tyv
     | Binding (x, e, e') ->
@@ -277,7 +277,7 @@ module Decl = struct
           Map.of_alist
             (module String)
             (List.map
-               ~f:(fun tv -> tv, Analyser_ctx.State.get ctx |> State.fresh_tv)
+               ~f:(fun tv -> tv, Analyser_ctx.State.get ctx |> Analyser_state.fresh_tv)
                utvs)
         with
         | `Ok x -> Result.Ok x

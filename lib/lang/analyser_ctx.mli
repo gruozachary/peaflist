@@ -13,5 +13,5 @@ module Tenv : sig
 end
 
 module State : sig
-  val get : t -> State.t
+  val get : t -> Analyser_state.t
 end
