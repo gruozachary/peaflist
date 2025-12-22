@@ -43,6 +43,7 @@ module type Type_pub = sig
   with type t = Type.t
 
 module Raw = Raw
+module Core = Core
 module Term_env : Term_env_pub = Term_env
 module Type_env : Type_env_pub = Type_env
 module Analyser_ctx : Analyser_ctx_pub = Analyser_ctx
