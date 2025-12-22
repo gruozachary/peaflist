@@ -1,6 +1,7 @@
 open! Base
 
 type t =
+  | TInt
   | TVar of Type_var.t
   | TFun of t * t
   | TProd of t list
