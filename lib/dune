@@ -1,5 +1,5 @@
 (library
  (name sqc)
- (libraries base base_trie)
+ (libraries base base_trie lang)
  (preprocess
   (pps ppx_let ppx_deriving.eq ppx_sexp_conv ppx_compare)))

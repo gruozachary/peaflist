@@ -1,13 +1,12 @@
 open! Base
 open Sqc
-open Typechecking
 
 module Line : sig
   module CommandKind : sig
     type t =
       | Quit
       | Help
-      | TypeOf of (string, Ast.Expr.t) Either.t
+      | TypeOf of (string, Lang.Raw.Expr.t) Either.t
       | TypeInfo of string
 
     type meta =
@@ -21,8 +20,8 @@ module Line : sig
   end
 
   type t =
-    | Expr of Ast.Expr.t
-    | Decl of Ast.decl
+    | Expr of Lang.Raw.Expr.t
+    | Decl of Lang.Raw.Decl.t
     | Command of CommandKind.t
 
   val parse : string -> t Option.t
@@ -31,7 +30,7 @@ end = struct
     type t =
       | Quit
       | Help
-      | TypeOf of (string, Ast.Expr.t) Either.t
+      | TypeOf of (string, Lang.Raw.Expr.t) Either.t
       | TypeInfo of string
 
     type meta =
@@ -78,8 +77,8 @@ end = struct
   end
 
   type t =
-    | Expr of Ast.Expr.t
-    | Decl of Ast.decl
+    | Expr of Lang.Raw.Expr.t
+    | Decl of Lang.Raw.Decl.t
     | Command of CommandKind.t
 
   let parser =
@@ -94,7 +93,7 @@ end = struct
   let parse = Peasec.exec parser
 end
 
-type t = { mutable semantic_ctx : Ctx.t }
+type t = { mutable semantic_ctx : Lang.Analyser_ctx.t }
 
 let handle_command toplevel_ctx cmd =
   let open Result in
@@ -111,20 +110,20 @@ let handle_command toplevel_ctx cmd =
     Ok false
   | Line.CommandKind.TypeOf (Either.First x) ->
     let%map scheme =
-      Ctx.Env.get toplevel_ctx.semantic_ctx
-      |> Gamma.lookup ~id:x
+      Lang.Analyser_ctx.Env.get toplevel_ctx.semantic_ctx
+      |> Lang.Term_env.lookup ~id:x
       |> of_option ~error:"Unbound variable identifier"
     in
-    Stdio.print_endline (Scheme.to_string scheme);
+    Stdio.print_endline (Lang.Scheme.to_string scheme);
     false
   | Line.CommandKind.TypeOf (Either.Second e) ->
-    let%map ty = typecheck_expr toplevel_ctx.semantic_ctx e in
-    Stdio.print_endline (Tau.to_string ty);
+    let%map ty = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
+    Stdio.print_endline (Lang.Type.to_string ty);
     false
   | Line.CommandKind.TypeInfo x ->
     let%map arity =
-      Ctx.Tenv.get toplevel_ctx.semantic_ctx
-      |> TyEnv.lookup ~id:x
+      Lang.Analyser_ctx.Tenv.get toplevel_ctx.semantic_ctx
+      |> Lang.Type_env.lookup ~id:x
       |> of_option ~error:"Unbound type identifier"
     in
     Stdio.print_endline ("Arity: " ^ Int.to_string arity);
@@ -142,21 +141,17 @@ let run toplevel_ctx =
   in
   match%bind Line.parse line |> of_option ~error:"Parse of input failed." with
   | Line.Expr e ->
-    let%map _ = typecheck_expr toplevel_ctx.semantic_ctx e in
+    let%map _ = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
     false
-  | Line.Decl (Ast.ValDecl (x, e)) ->
-    let%map ctx = typecheck_val_decl toplevel_ctx.semantic_ctx x e in
-    toplevel_ctx.semantic_ctx <- ctx;
-    false
-  | Line.Decl (Ast.TypeDecl (x, utvs, ctors)) ->
-    let%map ctx = typecheck_type_decl toplevel_ctx.semantic_ctx x utvs ctors in
+  | Line.Decl d ->
+    let%map ctx = Lang.Raw.Decl.typecheck toplevel_ctx.semantic_ctx d in
     toplevel_ctx.semantic_ctx <- ctx;
     false
   | Line.Command cmd -> handle_command toplevel_ctx cmd
 ;;
 
 let loop () =
-  let toplevel_ctx = { semantic_ctx = Ctx.empty () } in
+  let toplevel_ctx = { semantic_ctx = Lang.Analyser_ctx.empty () } in
   let rec go () =
     match run toplevel_ctx with
     | Result.Ok true -> ()
