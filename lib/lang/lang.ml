@@ -42,7 +42,7 @@ module type Ty_env_pub = sig
   end
   with type t = Ty_env.t
 
-module Ast = Ast
+module Raw = Raw
 module Term_env : Term_env_pub = Term_env
 module Ctx : Ctx_pub = Ctx
 module Scheme : Scheme_pub = Scheme

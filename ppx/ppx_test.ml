@@ -16,7 +16,7 @@ let expand_program_tests ~loc ~path:_ (expr : expression) =
         Option.map
           ast_result
           ~f:
-            (Lang.Ast.Prog.equal
+            (Lang.Raw.Prog.equal
                [%e
                  Ast_builder.Default.pexp_field
                    ~loc

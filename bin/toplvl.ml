@@ -6,7 +6,7 @@ module Line : sig
     type t =
       | Quit
       | Help
-      | TypeOf of (string, Lang.Ast.Expr.t) Either.t
+      | TypeOf of (string, Lang.Raw.Expr.t) Either.t
       | TypeInfo of string
 
     type meta =
@@ -20,8 +20,8 @@ module Line : sig
   end
 
   type t =
-    | Expr of Lang.Ast.Expr.t
-    | Decl of Lang.Ast.Decl.t
+    | Expr of Lang.Raw.Expr.t
+    | Decl of Lang.Raw.Decl.t
     | Command of CommandKind.t
 
   val parse : string -> t Option.t
@@ -30,7 +30,7 @@ end = struct
     type t =
       | Quit
       | Help
-      | TypeOf of (string, Lang.Ast.Expr.t) Either.t
+      | TypeOf of (string, Lang.Raw.Expr.t) Either.t
       | TypeInfo of string
 
     type meta =
@@ -77,8 +77,8 @@ end = struct
   end
 
   type t =
-    | Expr of Lang.Ast.Expr.t
-    | Decl of Lang.Ast.Decl.t
+    | Expr of Lang.Raw.Expr.t
+    | Decl of Lang.Raw.Decl.t
     | Command of CommandKind.t
 
   let parser =
@@ -117,7 +117,7 @@ let handle_command toplevel_ctx cmd =
     Stdio.print_endline (Lang.Scheme.to_string scheme);
     false
   | Line.CommandKind.TypeOf (Either.Second e) ->
-    let%map ty = Lang.Ast.Expr.typecheck toplevel_ctx.semantic_ctx e in
+    let%map ty = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
     Stdio.print_endline (Lang.Tau.to_string ty);
     false
   | Line.CommandKind.TypeInfo x ->
@@ -141,10 +141,10 @@ let run toplevel_ctx =
   in
   match%bind Line.parse line |> of_option ~error:"Parse of input failed." with
   | Line.Expr e ->
-    let%map _ = Lang.Ast.Expr.typecheck toplevel_ctx.semantic_ctx e in
+    let%map _ = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
     false
   | Line.Decl d ->
-    let%map ctx = Lang.Ast.Decl.typecheck toplevel_ctx.semantic_ctx d in
+    let%map ctx = Lang.Raw.Decl.typecheck toplevel_ctx.semantic_ctx d in
     toplevel_ctx.semantic_ctx <- ctx;
     false
   | Line.Command cmd -> handle_command toplevel_ctx cmd
