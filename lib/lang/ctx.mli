@@ -8,8 +8,8 @@ module Env : sig
 end
 
 module Tenv : sig
-  val get : t -> Ty_env.t
-  val map : t -> f:(Ty_env.t -> Ty_env.t) -> t
+  val get : t -> Type_env.t
+  val map : t -> f:(Type_env.t -> Type_env.t) -> t
 end
 
 module State : sig

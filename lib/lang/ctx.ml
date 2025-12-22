@@ -2,11 +2,11 @@ open! Base
 
 type t =
   { env : Term_env.t
-  ; tenv : Ty_env.t
+  ; tenv : Type_env.t
   ; state : State.t
   }
 
-let empty () = { env = Term_env.empty (); state = State.create (); tenv = Ty_env.empty }
+let empty () = { env = Term_env.empty (); state = State.create (); tenv = Type_env.empty }
 
 module Env = struct
   let get ctx = ctx.env

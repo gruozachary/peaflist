@@ -274,7 +274,7 @@ module Decl = struct
         | `Ok x -> Result.Ok x
         | `Duplicate_key _ -> Result.Error "Duplicate type variable"
       in
-      let ctx = Ctx.Tenv.map ctx ~f:(Ty_env.introduce ~id:x ~arity) in
+      let ctx = Ctx.Tenv.map ctx ~f:(Type_env.introduce ~id:x ~arity) in
       List.fold ctors ~init:(Result.Ok ctx) ~f:(fun ctx_opt (y, t_opt) ->
         let%bind ctx = ctx_opt in
         let%map tv_map = get_tvs () in

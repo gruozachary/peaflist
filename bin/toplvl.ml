@@ -123,7 +123,7 @@ let handle_command toplevel_ctx cmd =
   | Line.CommandKind.TypeInfo x ->
     let%map arity =
       Lang.Ctx.Tenv.get toplevel_ctx.semantic_ctx
-      |> Lang.Ty_env.lookup ~id:x
+      |> Lang.Type_env.lookup ~id:x
       |> of_option ~error:"Unbound type identifier"
     in
     Stdio.print_endline ("Arity: " ^ Int.to_string arity);
