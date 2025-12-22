@@ -3,8 +3,8 @@ type t
 val empty : unit -> t
 
 module Env : sig
-  val get : t -> Gamma.t
-  val map : t -> f:(Gamma.t -> Gamma.t) -> t
+  val get : t -> Term_env.t
+  val map : t -> f:(Term_env.t -> Term_env.t) -> t
 end
 
 module Tenv : sig

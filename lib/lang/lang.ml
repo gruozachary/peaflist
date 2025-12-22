@@ -1,9 +1,9 @@
-module type Gamma_pub = sig
+module type Term_env_pub = sig
     type t
 
     val lookup : t -> id:string -> Scheme.t option
   end
-  with type t = Gamma.t
+  with type t = Term_env.t
 
 module type Ctx_pub = sig
     type t
@@ -11,7 +11,7 @@ module type Ctx_pub = sig
     val empty : unit -> t
 
     module Env : sig
-      val get : t -> Gamma.t
+      val get : t -> Term_env.t
     end
 
     module Tenv : sig
@@ -43,7 +43,7 @@ module type Ty_env_pub = sig
   with type t = Ty_env.t
 
 module Ast = Ast
-module Gamma : Gamma_pub = Gamma
+module Term_env : Term_env_pub = Term_env
 module Ctx : Ctx_pub = Ctx
 module Scheme : Scheme_pub = Scheme
 module Tau : Tau_pub = Tau

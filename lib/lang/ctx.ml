@@ -1,12 +1,12 @@
 open! Base
 
 type t =
-  { env : Gamma.t
+  { env : Term_env.t
   ; tenv : Ty_env.t
   ; state : State.t
   }
 
-let empty () = { env = Gamma.empty (); state = State.create (); tenv = Ty_env.empty }
+let empty () = { env = Term_env.empty (); state = State.create (); tenv = Ty_env.empty }
 
 module Env = struct
   let get ctx = ctx.env

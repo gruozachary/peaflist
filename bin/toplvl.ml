@@ -111,7 +111,7 @@ let handle_command toplevel_ctx cmd =
   | Line.CommandKind.TypeOf (Either.First x) ->
     let%map scheme =
       Lang.Ctx.Env.get toplevel_ctx.semantic_ctx
-      |> Lang.Gamma.lookup ~id:x
+      |> Lang.Term_env.lookup ~id:x
       |> of_option ~error:"Unbound variable identifier"
     in
     Stdio.print_endline (Lang.Scheme.to_string scheme);

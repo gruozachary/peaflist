@@ -21,7 +21,7 @@ let apply_scheme ~sub sc =
   Scheme.Forall (qs, apply_type ~sub ty)
 ;;
 
-let apply_gamma ~sub env = Gamma.map env ~f:(fun sc -> apply_scheme ~sub sc)
+let apply_term_env ~sub env = Term_env.map env ~f:(fun sc -> apply_scheme ~sub sc)
 
 let add sub ~tv ~ty =
   match ty with
