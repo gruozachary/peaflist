@@ -16,7 +16,7 @@ let map env ~f = Map.map ~f env
 let free_tvars env =
   Map.fold
     env
-    ~init:(Set.empty (module Tvar))
+    ~init:(Set.empty (module Type_var))
     ~f:(fun ~key:_ ~data acc -> Set.union acc (Scheme.free_tvars data))
 ;;
 

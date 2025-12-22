@@ -7,7 +7,7 @@ let create () = { next = 0 }
 let fresh_tv s =
   let v = s.next in
   s.next <- v + 1;
-  Tvar.of_int v
+  Type_var.of_int v
 ;;
 
 let fresh s = Type.TVar (fresh_tv s)

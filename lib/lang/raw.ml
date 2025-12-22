@@ -8,7 +8,7 @@ let instantiate ctx = function
   | Scheme.Forall (qs, ty) ->
     let sub =
       List.fold
-        ~init:(Map.empty (module Tvar))
+        ~init:(Map.empty (module Type_var))
         ~f:(fun acc key -> Map.set acc ~key ~data:(Ctx.State.get ctx |> State.fresh_tv))
         qs
     in

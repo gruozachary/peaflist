@@ -1,9 +1,9 @@
 open! Base
 
-type t = Forall of Tvar.t list * Type.t
+type t = Forall of Type_var.t list * Type.t
 
 let to_string (Forall (qs, t)) =
-  (List.map qs ~f:Tvar.to_string
+  (List.map qs ~f:Type_var.to_string
    |> List.intersperse ~sep:" "
    |> List.fold ~init:"forall " ~f:String.append)
   ^ " . "
@@ -11,7 +11,7 @@ let to_string (Forall (qs, t)) =
 ;;
 
 let free_tvars = function
-  | Forall (qs, ty) -> Set.diff (Set.of_list (module Tvar) qs) (Type.free_tvars ty)
+  | Forall (qs, ty) -> Set.diff (Set.of_list (module Type_var) qs) (Type.free_tvars ty)
 ;;
 
 let of_type ty = Forall ([], ty)

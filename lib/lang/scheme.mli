@@ -1,7 +1,7 @@
 open! Base
 
-type t = Forall of Tvar.t list * Type.t
+type t = Forall of Type_var.t list * Type.t
 
 val to_string : t -> string
-val free_tvars : t -> (Tvar.t, Tvar.comparator_witness) Set.t
+val free_tvars : t -> (Type_var.t, Type_var.comparator_witness) Set.t
 val of_type : Type.t -> t

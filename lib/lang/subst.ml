@@ -1,8 +1,8 @@
 open! Base
 
-type t = (Tvar.t, Type.t, Tvar.comparator_witness) Map.t
+type t = (Type_var.t, Type.t, Type_var.comparator_witness) Map.t
 
-let empty : t = Map.empty (module Tvar)
+let empty : t = Map.empty (module Type_var)
 
 let rec apply_type ~sub ty =
   match ty with
@@ -17,7 +17,9 @@ let rec apply_type ~sub ty =
 
 let apply_scheme ~sub sc =
   let (Scheme.Forall (qs, ty)) = sc in
-  let sub = Map.filter_keys sub ~f:(fun tv -> List.exists qs ~f:(Tvar.equal tv) |> not) in
+  let sub =
+    Map.filter_keys sub ~f:(fun tv -> List.exists qs ~f:(Type_var.equal tv) |> not)
+  in
   Scheme.Forall (qs, apply_type ~sub ty)
 ;;
 
@@ -26,7 +28,9 @@ let apply_term_env ~sub env = Term_env.map env ~f:(fun sc -> apply_scheme ~sub s
 let add sub ~tv ~ty =
   match ty with
   | Type.TVar tv' ->
-    if Tvar.equal tv tv' then Result.Ok sub else Result.Ok (Map.set sub ~key:tv ~data:ty)
+    if Type_var.equal tv tv'
+    then Result.Ok sub
+    else Result.Ok (Map.set sub ~key:tv ~data:ty)
   | _ ->
     if Type.occurs tv ty
     then Result.Error "Recursive type variable definiton"
