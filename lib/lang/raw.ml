@@ -9,7 +9,8 @@ let instantiate ctx = function
     let sub =
       List.fold
         ~init:(Map.empty (module Type_var))
-        ~f:(fun acc key -> Map.set acc ~key ~data:(Ctx.State.get ctx |> State.fresh_tv))
+        ~f:(fun acc key ->
+          Map.set acc ~key ~data:(Analyser_ctx.State.get ctx |> State.fresh_tv))
         qs
     in
     let rec replace sub ty =
@@ -26,7 +27,7 @@ let instantiate ctx = function
 ;;
 
 let generalise ctx ty =
-  let env_tvs = Ctx.Env.get ctx |> Term_env.free_tvars in
+  let env_tvs = Analyser_ctx.Env.get ctx |> Term_env.free_tvars in
   let ty_tvs = Type.free_tvars ty in
   Scheme.Forall (Set.diff ty_tvs env_tvs |> Set.to_list, ty)
 ;;
@@ -46,19 +47,21 @@ module Pat = struct
       let%bind t =
         Result.of_option
           ~error:"Unbound constructor in pattern"
-          (Option.map (Ctx.Env.get ctx |> Term_env.lookup ~id:x) ~f:(instantiate ctx))
+          (Option.map
+             (Analyser_ctx.Env.get ctx |> Term_env.lookup ~id:x)
+             ~f:(instantiate ctx))
       in
       (match t, po with
        | Type.TFun _, Option.Some p ->
          let%bind s, g, t' = infer ctx p in
-         let t'' = Ctx.State.get ctx |> State.fresh in
+         let t'' = Analyser_ctx.State.get ctx |> State.fresh in
          let%map s' = Subst.unify (Type.TFun (t', t'')) t in
          let s'' = Subst.compose s s' in
          s'', g, Subst.apply_type ~sub:s'' t''
        | Type.TCon _, Option.None -> Result.Ok (Subst.empty, Term_env.empty (), t)
        | _ -> Result.Error "Constructor arity mismatch in pattern")
     | Ident x ->
-      let t = Ctx.State.get ctx |> State.fresh in
+      let t = Analyser_ctx.State.get ctx |> State.fresh in
       Result.Ok
         ( Subst.empty
         , Term_env.introduce ~id:x ~sc:(Scheme.of_type t) (Term_env.empty ())
@@ -118,34 +121,38 @@ module Expr = struct
     let open Result.Let_syntax in
     match e with
     | Id x ->
-      (match Ctx.Env.get ctx |> Term_env.lookup ~id:x with
+      (match Analyser_ctx.Env.get ctx |> Term_env.lookup ~id:x with
        | Option.Some sc ->
          let ty = instantiate ctx sc in
          Result.Ok (Subst.empty, ty)
        | Option.None -> Result.Error "Unbound variable")
     | Constr x ->
-      (match Ctx.Env.get ctx |> Term_env.lookup ~id:x with
+      (match Analyser_ctx.Env.get ctx |> Term_env.lookup ~id:x with
        | Option.Some sc ->
          let ty = instantiate ctx sc in
          Result.Ok (Subst.empty, ty)
        | Option.None -> Result.Error "Unbound constructor")
     | Lambda (x, e) ->
-      let ty = Ctx.State.get ctx |> State.fresh in
-      let ctx = Ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc:(Scheme.of_type ty)) in
+      let ty = Analyser_ctx.State.get ctx |> State.fresh in
+      let ctx =
+        Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc:(Scheme.of_type ty))
+      in
       let%map s, ty' = infer ctx e in
       s, Type.TFun (Subst.apply_type ~sub:s ty, Subst.apply_type ~sub:s ty')
     | Apply (ef, e) ->
       let%bind s, tyf = infer ctx ef in
-      let ctx = Ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
+      let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
       let%bind s', ty = infer ctx e in
-      let tyv = Ctx.State.get ctx |> State.fresh in
+      let tyv = Analyser_ctx.State.get ctx |> State.fresh in
       let%map s'' = Subst.unify (Subst.apply_type ~sub:s' tyf) (Type.TFun (ty, tyv)) in
       Subst.compose (Subst.compose s s') s'', Subst.apply_type ~sub:s'' tyv
     | Binding (x, e, e') ->
       let%bind s, ty = infer ctx e in
-      let ctx = Ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
+      let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
       let sc = generalise ctx ty in
-      let%map s', ty' = infer (Ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc)) e' in
+      let%map s', ty' =
+        infer (Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc)) e'
+      in
       Subst.compose s s', ty'
     | Group e -> infer ctx e
     | Int _ -> Result.Ok (Subst.empty, Type.TCon ("int", []))
@@ -154,7 +161,7 @@ module Expr = struct
       (match o with
        | Div | Mul | Plus | Sub ->
          let%bind s, ty = infer ctx el in
-         let ctx = Ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
+         let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
          let%bind s1, ty' = infer ctx er in
          let%bind s2 =
            Subst.unify (Subst.apply_type ~sub:s1 ty) (Type.TCon ("int", []))
@@ -179,7 +186,7 @@ module Expr = struct
             in
             let s = Subst.compose s s_uni in
             let ctx =
-              Ctx.Env.map
+              Analyser_ctx.Env.map
                 ctx
                 ~f:
                   (Term_env.merge g ~f:(fun ~key:_ m ->
@@ -210,7 +217,7 @@ module Expr = struct
           ~init:(Result.Ok (Subst.empty, []))
           ~f:(fun acc e ->
             let%bind s, tys = acc in
-            let ctx = Ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
+            let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
             let%map s', ty = infer ctx e in
             Subst.compose s s', ty :: tys)
           es
@@ -260,21 +267,23 @@ module Decl = struct
     match d with
     | ValDecl (x, e) ->
       let%map s, ty = Expr.infer ctx e in
-      let ctx = Ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
+      let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
       let sc = generalise ctx ty in
-      Ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc)
+      Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc)
     | TypeDecl (x, utvs, ctors) ->
       let arity = List.length utvs in
       let get_tvs () =
         match
           Map.of_alist
             (module String)
-            (List.map ~f:(fun tv -> tv, Ctx.State.get ctx |> State.fresh_tv) utvs)
+            (List.map
+               ~f:(fun tv -> tv, Analyser_ctx.State.get ctx |> State.fresh_tv)
+               utvs)
         with
         | `Ok x -> Result.Ok x
         | `Duplicate_key _ -> Result.Error "Duplicate type variable"
       in
-      let ctx = Ctx.Tenv.map ctx ~f:(Type_env.introduce ~id:x ~arity) in
+      let ctx = Analyser_ctx.Tenv.map ctx ~f:(Type_env.introduce ~id:x ~arity) in
       List.fold ctors ~init:(Result.Ok ctx) ~f:(fun ctx_opt (y, t_opt) ->
         let%bind ctx = ctx_opt in
         let%map tv_map = get_tvs () in
@@ -288,7 +297,7 @@ module Decl = struct
              | Option.None -> assert false)
           | Option.None -> Scheme.Forall (tvs, Type.TCon (x, tyvs))
         in
-        Ctx.Env.map ctx ~f:(Term_env.introduce ~id:y ~sc))
+        Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:y ~sc))
   ;;
 end
 

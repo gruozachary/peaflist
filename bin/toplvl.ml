@@ -93,7 +93,7 @@ end = struct
   let parse = Peasec.exec parser
 end
 
-type t = { mutable semantic_ctx : Lang.Ctx.t }
+type t = { mutable semantic_ctx : Lang.Analyser_ctx.t }
 
 let handle_command toplevel_ctx cmd =
   let open Result in
@@ -110,7 +110,7 @@ let handle_command toplevel_ctx cmd =
     Ok false
   | Line.CommandKind.TypeOf (Either.First x) ->
     let%map scheme =
-      Lang.Ctx.Env.get toplevel_ctx.semantic_ctx
+      Lang.Analyser_ctx.Env.get toplevel_ctx.semantic_ctx
       |> Lang.Term_env.lookup ~id:x
       |> of_option ~error:"Unbound variable identifier"
     in
@@ -122,7 +122,7 @@ let handle_command toplevel_ctx cmd =
     false
   | Line.CommandKind.TypeInfo x ->
     let%map arity =
-      Lang.Ctx.Tenv.get toplevel_ctx.semantic_ctx
+      Lang.Analyser_ctx.Tenv.get toplevel_ctx.semantic_ctx
       |> Lang.Type_env.lookup ~id:x
       |> of_option ~error:"Unbound type identifier"
     in
@@ -151,7 +151,7 @@ let run toplevel_ctx =
 ;;
 
 let loop () =
-  let toplevel_ctx = { semantic_ctx = Lang.Ctx.empty () } in
+  let toplevel_ctx = { semantic_ctx = Lang.Analyser_ctx.empty () } in
   let rec go () =
     match run toplevel_ctx with
     | Result.Ok true -> ()

@@ -13,7 +13,7 @@ module type Type_env_pub = sig
   end
   with type t = Type_env.t
 
-module type Ctx_pub = sig
+module type Analyser_ctx_pub = sig
     type t
 
     val empty : unit -> t
@@ -26,7 +26,7 @@ module type Ctx_pub = sig
       val get : t -> Type_env.t
     end
   end
-  with type t = Ctx.t
+  with type t = Analyser_ctx.t
 
 module type Scheme_pub = sig
     type t
@@ -45,6 +45,6 @@ module type Type_pub = sig
 module Raw = Raw
 module Term_env : Term_env_pub = Term_env
 module Type_env : Type_env_pub = Type_env
-module Ctx : Ctx_pub = Ctx
+module Analyser_ctx : Analyser_ctx_pub = Analyser_ctx
 module Scheme : Scheme_pub = Scheme
 module Type : Type_pub = Type
