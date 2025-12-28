@@ -35,7 +35,8 @@ td ('a) maybe :=
   | Just of 'a
   | Nothing
         |}
-  ; ast = [ TypeDecl ("maybe", [ "'a" ], [ "Just", Some (Ty.Var "'a"); "Nothing", None ]) ]
+  ; ast =
+      [ TypeDecl ("maybe", [ "'a" ], [ "Just", Some (Ty.Var "'a"); "Nothing", None ]) ]
   }
 ;;
 
@@ -99,15 +100,18 @@ td ('a, 'b) test :=
                      ( Ty.Prod
                          [ Ty.Con
                              ( "option"
-                             , [ Ty.Con ("tri", [ Ty.Var "'a"; Ty.Var "'b"; Ty.Con ("int", []) ]) ]
-                             )
+                             , [ Ty.Con
+                                   ( "tri"
+                                   , [ Ty.Var "'a"; Ty.Var "'b"; Ty.Con ("int", []) ] )
+                               ] )
                          ; Ty.Con ("char", [])
                          ]
                      , Ty.Fun
                          ( Ty.Prod
                              [ Ty.Con ("lol", [])
                              ; Ty.Con ("int", [])
-                             ; Ty.Con ("types", [ Ty.Con ("chain", [ Ty.Con ("long", []) ]) ])
+                             ; Ty.Con
+                                 ("types", [ Ty.Con ("chain", [ Ty.Con ("long", []) ]) ])
                              ]
                          , Ty.Con ("result", [ Ty.Var "'a"; Ty.Var "'b" ]) ) )) )
             ] )
