@@ -298,10 +298,11 @@ module Decl = struct
     let open Result.Let_syntax in
     match d with
     | ValDecl (x, e) ->
-      let%map s, ty, _ = Expr.infer ctx e in
+      let%map s, ty, e_c = Expr.infer ctx e in
       let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
       let sc = generalise ctx ty in
-      Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc)
+      ( Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc)
+      , Core.Decl.ValDecl (x, e_c) )
     | TypeDecl (x, utvs, ctors) ->
       let arity = List.length utvs in
       let get_tvs () =
@@ -316,20 +317,23 @@ module Decl = struct
         | `Duplicate_key _ -> Result.Error "Duplicate type variable"
       in
       let ctx = Analyser_ctx.Tenv.map ctx ~f:(Type_env.introduce ~id:x ~arity) in
-      List.fold ctors ~init:(Result.Ok ctx) ~f:(fun ctx_opt (y, t_opt) ->
-        let%bind ctx = ctx_opt in
-        let%map tv_map = get_tvs () in
-        let tvs = Map.data tv_map in
-        let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
-        let sc =
-          match t_opt with
-          | Option.Some t ->
-            (match Ty.to_type ~vm:tv_map t with
-             | Option.Some ty -> Scheme.Forall (tvs, Type.TFun (ty, Type.TCon (x, tyvs)))
-             | Option.None -> assert false)
-          | Option.None -> Scheme.Forall (tvs, Type.TCon (x, tyvs))
-        in
-        Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:y ~sc))
+      let%map ctx =
+        List.fold ctors ~init:(Result.Ok ctx) ~f:(fun ctx_opt (y, t_opt) ->
+          let%bind ctx = ctx_opt in
+          let%map tv_map = get_tvs () in
+          let tvs = Map.data tv_map in
+          let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
+          let sc =
+            match t_opt with
+            | Option.Some t ->
+              (match Ty.to_type ~vm:tv_map t with
+               | Option.Some ty -> Scheme.Forall (tvs, Type.TFun (ty, Type.TCon (x, tyvs)))
+               | Option.None -> assert false)
+            | Option.None -> Scheme.Forall (tvs, Type.TCon (x, tyvs))
+          in
+          Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:y ~sc))
+      in
+      ctx, Core.Decl.TypeDecl x
   ;;
 end
 
@@ -337,12 +341,15 @@ module Prog = struct
   type t = Decl.t list [@@deriving eq]
 
   let typecheck ctx ds =
-    let open Result in
-    let rec go ctx ~ds =
+    let open Result.Let_syntax in
+    let rec go ctx ds_c ~ds =
       match ds with
-      | [] -> Result.Ok ctx
-      | d :: ds -> Decl.typecheck ctx d >>= go ~ds
+      | [] -> Result.Ok (ctx, ds_c)
+      | d :: ds ->
+        let%bind ctx, d_c = Decl.typecheck ctx d in
+        go ctx (d_c :: ds_c) ~ds
     in
-    go ctx ~ds
+    let%map ctx, ds_c = go ctx [] ~ds in
+    ctx, List.rev ds_c
   ;;
 end

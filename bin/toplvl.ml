@@ -144,7 +144,7 @@ let run toplevel_ctx =
     let%map _ = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
     false
   | Line.Decl d ->
-    let%map ctx = Lang.Raw.Decl.typecheck toplevel_ctx.semantic_ctx d in
+    let%map ctx, _ = Lang.Raw.Decl.typecheck toplevel_ctx.semantic_ctx d in
     toplevel_ctx.semantic_ctx <- ctx;
     false
   | Line.Command cmd -> handle_command toplevel_ctx cmd

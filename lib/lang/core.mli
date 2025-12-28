@@ -27,7 +27,7 @@ end
 module Decl : sig
   type t =
     | ValDecl of id * Expr.t
-    | TypeDecl of id * ty_var list * (id * Type.t Option.t) list
+    | TypeDecl of id
 end
 
 module Prog : sig
