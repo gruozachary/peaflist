@@ -8,7 +8,7 @@ module Pat : sig
   type t =
     | Int of int
     | Ident of id * Type.t
-    | Tuple of t list
+    | Tuple of t list * Type.t
     | CtorApp of id * t Option.t * Type.t
 end
 
