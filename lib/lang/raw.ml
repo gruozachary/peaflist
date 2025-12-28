@@ -53,27 +53,30 @@ module Pat = struct
       in
       (match t, po with
        | Type.TFun _, Option.Some p ->
-         let%bind s, g, t' = infer ctx p in
+         let%bind s, g, t', p_c = infer ctx p in
          let t'' = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
          let%map s' = Subst.unify (Type.TFun (t', t'')) t in
          let s'' = Subst.compose s s' in
-         s'', g, Subst.apply_type ~sub:s'' t''
-       | Type.TCon _, Option.None -> Result.Ok (Subst.empty, Term_env.empty (), t)
+         s'', g, Subst.apply_type ~sub:s'' t'', Core.Pat.CtorApp (x, Option.Some p_c, t'')
+       | Type.TCon _, Option.None ->
+         Result.Ok
+           (Subst.empty, Term_env.empty (), t, Core.Pat.CtorApp (x, Option.None, t))
        | _ -> Result.Error "Constructor arity mismatch in pattern")
     | Ident x ->
       let t = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       Result.Ok
         ( Subst.empty
         , Term_env.introduce ~id:x ~sc:(Scheme.of_type t) (Term_env.empty ())
-        , t )
-    | Int _ -> Result.Ok (Subst.empty, Term_env.empty (), Type.TCon ("int", []))
+        , t
+        , Core.Pat.Ident (x, t) )
+    | Int x -> Result.Ok (Subst.empty, Term_env.empty (), Type.TCon ("int", []), Core.Pat.Int x)
     | Tuple ps ->
-      let%map s, g, ts =
+      let%map s, g, ts, p_cs =
         List.fold
-          ~init:(Result.Ok (Subst.empty, Term_env.empty (), []))
+          ~init:(Result.Ok (Subst.empty, Term_env.empty (), [], []))
           ~f:(fun sgo p ->
-            let%bind s, g, ts = sgo in
-            let%bind s', g', t = infer ctx p in
+            let%bind s, g, ts, p_cs = sgo in
+            let%bind s', g', t, p_c = infer ctx p in
             let g = Subst.apply_term_env ~sub:s' g in
             let g'' =
               Term_env.merge g g' ~f:(fun ~key:_ m ->
@@ -87,10 +90,11 @@ module Pat = struct
               then Result.Ok g''
               else Result.Error "Variable redefinition inside of pattern"
             in
-            Subst.compose s s', g'', t :: List.map ~f:(Subst.apply_type ~sub:s') ts)
+            Subst.compose s s', g'', t :: List.map ~f:(Subst.apply_type ~sub:s') ts, p_c :: p_cs)
           ps
       in
-      s, g, Type.TProd (List.rev ts)
+      let t = Type.TProd (List.rev ts) in
+      s, g, t, Core.Pat.Tuple (List.rev p_cs, t)
   ;;
 end
 
@@ -179,7 +183,7 @@ module Expr = struct
           arms
           ~f:(fun acc (p, e) ->
             let%bind s, ts = acc in
-            let%bind s_pat, g, t_pat = Pat.infer ctx p in
+            let%bind s_pat, g, t_pat, _ = Pat.infer ctx p in
             let s = Subst.compose s s_pat in
             let%bind s_uni =
               Subst.unify (Subst.apply_type ~sub:s t_pat) (Subst.apply_type ~sub:s t_opr)
