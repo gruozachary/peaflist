@@ -15,7 +15,6 @@ let instantiate ctx = function
     in
     let rec replace sub ty =
       match ty with
-      | Type.TInt -> Type.TInt
       | Type.TVar tv ->
         (match Map.find sub tv with
          | Some tv' -> Type.TVar tv'
@@ -67,7 +66,7 @@ module Pat = struct
         ( Subst.empty
         , Term_env.introduce ~id:x ~sc:(Scheme.of_type t) (Term_env.empty ())
         , t )
-    | Int _ -> Result.Ok (Subst.empty, Term_env.empty (), Type.TInt)
+    | Int _ -> Result.Ok (Subst.empty, Term_env.empty (), Type.TCon ("int", []))
     | Tuple ps ->
       let%map s, g, ts =
         List.fold
@@ -156,7 +155,7 @@ module Expr = struct
       in
       Subst.compose s s', ty'
     | Group e -> infer ctx e
-    | Int _ -> Result.Ok (Subst.empty, Type.TInt)
+    | Int _ -> Result.Ok (Subst.empty, Type.TCon ("int", []))
     | BinOp (el, o, er) ->
       let open Bin_op in
       (match o with
@@ -164,10 +163,14 @@ module Expr = struct
          let%bind s, ty = infer ctx el in
          let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
          let%bind s1, ty' = infer ctx er in
-         let%bind s2 = Subst.unify (Subst.apply_type ~sub:s1 ty) Type.TInt in
-         let%map s3 = Subst.unify (Subst.apply_type ~sub:s2 ty') Type.TInt in
+         let%bind s2 =
+           Subst.unify (Subst.apply_type ~sub:s1 ty) (Type.TCon ("int", []))
+         in
+         let%map s3 =
+           Subst.unify (Subst.apply_type ~sub:s2 ty') (Type.TCon ("int", []))
+         in
          let s' = Subst.compose (Subst.compose (Subst.compose s s1) s2) s3 in
-         s', Type.TInt)
+         s', Type.TCon ("int", []))
     | Match (o, arms) ->
       let%bind s_opr, t_opr = infer ctx o in
       let%bind s, ts =
@@ -228,7 +231,6 @@ end
 
 module Ty = struct
   type t =
-    | Int
     | Id of id
     | App of id * t list
     | Prod of t list
@@ -238,7 +240,6 @@ module Ty = struct
   let rec to_type ~vm t =
     let open Option.Let_syntax in
     match t with
-    | Int -> Some Type.TInt
     | Id x ->
       let%map tv = Map.find vm x in
       Type.TVar tv

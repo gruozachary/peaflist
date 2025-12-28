@@ -4,7 +4,7 @@ open Let_syntax
 open Lang.Raw
 
 let keywords =
-  Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td"; "of"; "with"; "int" ]
+  Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td"; "of"; "with" ]
 ;;
 
 let symbols =

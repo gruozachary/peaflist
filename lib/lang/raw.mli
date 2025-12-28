@@ -45,7 +45,6 @@ end
 
 module Ty : sig
   type t =
-    | Int
     | Id of id
     | App of id * t list
     | Prod of t list

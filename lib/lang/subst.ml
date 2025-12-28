@@ -6,7 +6,6 @@ let empty : t = Map.empty (module Type_var)
 
 let rec apply_type ~sub ty =
   match ty with
-  | Type.TInt -> Type.TInt
   | Type.TVar x ->
     (match Map.find sub x with
      | Some ty' -> ty'
