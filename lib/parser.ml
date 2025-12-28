@@ -178,17 +178,20 @@ end = struct
 
   and ty_app () =
     let%bind head =
-      (match%bind tuple_1 (defer parse) with
-       | [ x ] -> return x
-       | xs ->
-         let%map tid = Ident.ty in
-         Ty.App (tid, xs))
-      <|>
-      let%map x = Ident.ty in
-      Ty.Id x
+      choice
+        [ (match%bind tuple_1 (defer parse) with
+           | [ t ] -> return t
+           | ts ->
+             let%map x = Ident.lower in
+             Ty.Con (x, ts))
+        ; (let%map x = Ident.lower in
+           Ty.Con (x, []))
+        ; (let%map x = Ident.dash in
+           Ty.Var x)
+        ]
     in
-    let%map rest = many Ident.ty in
-    List.fold ~init:head ~f:(fun acc t -> Ty.App (t, [ acc ])) rest
+    let%map rest = many Ident.lower in
+    List.fold ~init:head ~f:(fun acc t -> Ty.Con (t, [ acc ])) rest
   ;;
 end
 
