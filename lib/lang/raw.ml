@@ -69,7 +69,8 @@ module Pat = struct
         , Term_env.introduce ~id:x ~sc:(Scheme.of_type t) (Term_env.empty ())
         , t
         , Core.Pat.Ident (x, t) )
-    | Int x -> Result.Ok (Subst.empty, Term_env.empty (), Type.TCon ("int", []), Core.Pat.Int x)
+    | Int x ->
+      Result.Ok (Subst.empty, Term_env.empty (), Type.TCon ("int", []), Core.Pat.Int x)
     | Tuple ps ->
       let%map s, g, ts, p_cs =
         List.fold
@@ -90,7 +91,10 @@ module Pat = struct
               then Result.Ok g''
               else Result.Error "Variable redefinition inside of pattern"
             in
-            Subst.compose s s', g'', t :: List.map ~f:(Subst.apply_type ~sub:s') ts, p_c :: p_cs)
+            ( Subst.compose s s'
+            , g''
+            , t :: List.map ~f:(Subst.apply_type ~sub:s') ts
+            , p_c :: p_cs ))
           ps
       in
       let t = Type.TProd (List.rev ts) in
@@ -128,45 +132,49 @@ module Expr = struct
       (match Analyser_ctx.Env.get ctx |> Term_env.lookup ~id:x with
        | Option.Some sc ->
          let ty = instantiate ctx sc in
-         Result.Ok (Subst.empty, ty)
+         Result.Ok (Subst.empty, ty, Core.Expr.Id (x, ty))
        | Option.None -> Result.Error "Unbound variable")
     | Constr x ->
       (match Analyser_ctx.Env.get ctx |> Term_env.lookup ~id:x with
        | Option.Some sc ->
          let ty = instantiate ctx sc in
-         Result.Ok (Subst.empty, ty)
+         Result.Ok (Subst.empty, ty, Core.Expr.Constr (x, ty))
        | Option.None -> Result.Error "Unbound constructor")
     | Lambda (x, e) ->
       let ty = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let ctx =
         Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc:(Scheme.of_type ty))
       in
-      let%map s, ty' = infer ctx e in
-      s, Type.TFun (Subst.apply_type ~sub:s ty, Subst.apply_type ~sub:s ty')
+      let%map s, ty', e_c = infer ctx e in
+      ( s
+      , Type.TFun (Subst.apply_type ~sub:s ty, Subst.apply_type ~sub:s ty')
+      , Core.Expr.Lambda (x, ty, e_c) )
     | Apply (ef, e) ->
-      let%bind s, tyf = infer ctx ef in
+      let%bind s, tyf, ef_c = infer ctx ef in
       let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
-      let%bind s', ty = infer ctx e in
+      let%bind s', ty, e_c = infer ctx e in
       let tyv = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let%map s'' = Subst.unify (Subst.apply_type ~sub:s' tyf) (Type.TFun (ty, tyv)) in
-      Subst.compose (Subst.compose s s') s'', Subst.apply_type ~sub:s'' tyv
+      ( Subst.compose (Subst.compose s s') s''
+      , Subst.apply_type ~sub:s'' tyv
+      , Core.Expr.Apply (ef_c, e_c, tyv) )
     | Binding (x, e, e') ->
-      let%bind s, ty = infer ctx e in
+      let%bind s, ty, e_c = infer ctx e in
       let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
       let sc = generalise ctx ty in
-      let%map s', ty' =
+      let%map s', ty', e_c' =
         infer (Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc)) e'
       in
-      Subst.compose s s', ty'
+      Subst.compose s s', ty', Core.Expr.Let (x, sc, e_c, e_c')
     | Group e -> infer ctx e
-    | Int _ -> Result.Ok (Subst.empty, Type.TCon ("int", []))
+    | Int x -> Result.Ok (Subst.empty, Type.TCon ("int", []), Core.Expr.Int x)
     | BinOp (el, o, er) ->
       let open Bin_op in
       (match o with
        | Div | Mul | Plus | Sub ->
-         let%bind s, ty = infer ctx el in
+         let%bind s, ty, el_c = infer ctx el in
          let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
-         let%bind s1, ty' = infer ctx er in
+         let%bind s1, ty', er_c = infer ctx er in
          let%bind s2 =
            Subst.unify (Subst.apply_type ~sub:s1 ty) (Type.TCon ("int", []))
          in
@@ -174,16 +182,32 @@ module Expr = struct
            Subst.unify (Subst.apply_type ~sub:s2 ty') (Type.TCon ("int", []))
          in
          let s' = Subst.compose (Subst.compose (Subst.compose s s1) s2) s3 in
-         s', Type.TCon ("int", []))
+         ( s'
+         , Type.TCon ("int", [])
+         , Core.Expr.Apply
+             ( Core.Expr.Apply
+                 ( Core.Expr.Id
+                     ( (match o with
+                        | Div -> "/"
+                        | Mul -> "*"
+                        | Plus -> "+"
+                        | Sub -> "-")
+                     , Type.TFun
+                         ( Type.TCon ("int", [])
+                         , Type.TFun (Type.TCon ("int", []), Type.TCon ("int", [])) ) )
+                 , el_c
+                 , Type.TFun (Type.TCon ("int", []), Type.TCon ("int", [])) )
+             , er_c
+             , Type.TCon ("int", []) ) ))
     | Match (o, arms) ->
-      let%bind s_opr, t_opr = infer ctx o in
-      let%bind s, ts =
+      let%bind s_opr, t_opr, e_opr_c = infer ctx o in
+      let%bind s, ts, arms_c =
         List.fold
-          ~init:(Result.Ok (s_opr, []))
+          ~init:(Result.Ok (s_opr, [], []))
           arms
           ~f:(fun acc (p, e) ->
-            let%bind s, ts = acc in
-            let%bind s_pat, g, t_pat, _ = Pat.infer ctx p in
+            let%bind s, ts, arms_c = acc in
+            let%bind s_pat, g, t_pat, p_c = Pat.infer ctx p in
             let s = Subst.compose s s_pat in
             let%bind s_uni =
               Subst.unify (Subst.apply_type ~sub:s t_pat) (Subst.apply_type ~sub:s t_opr)
@@ -199,38 +223,42 @@ module Expr = struct
                      | `Right x -> Option.Some x
                      | `Both (_, r) -> Option.Some r))
             in
-            let%map s_exp, t_exp = infer ctx e in
-            Subst.compose s s_exp, t_exp :: ts)
+            let%map s_exp, t_exp, e_c = infer ctx e in
+            Subst.compose s s_exp, t_exp :: ts, (p_c, e_c) :: arms_c)
       in
       let%bind t, ts =
         match ts with
         | [] -> Result.Error "Cannot have no match arms"
         | t :: ts -> Result.Ok (t, ts)
       in
-      List.fold
-        ~init:(Result.Ok (s, Subst.apply_type ~sub:s t))
-        ~f:(fun acc t ->
-          let%bind s, t_acc = acc in
-          let%map s_uni = Subst.unify t_acc (Subst.apply_type ~sub:s t) in
-          let s = Subst.compose s s_uni in
-          s, Subst.apply_type ~sub:s t_acc)
-        ts
-    | Tuple es ->
-      let%map s, tys =
+      let%map s, t =
         List.fold
-          ~init:(Result.Ok (Subst.empty, []))
+          ~init:(Result.Ok (s, Subst.apply_type ~sub:s t))
+          ~f:(fun acc t ->
+            let%bind s, t_acc = acc in
+            let%map s_uni = Subst.unify t_acc (Subst.apply_type ~sub:s t) in
+            let s = Subst.compose s s_uni in
+            s, Subst.apply_type ~sub:s t_acc)
+          ts
+      in
+      s, t, Core.Expr.Match (e_opr_c, List.rev arms_c, t)
+    | Tuple es ->
+      let%map s, tys, es_c =
+        List.fold
+          ~init:(Result.Ok (Subst.empty, [], []))
           ~f:(fun acc e ->
-            let%bind s, tys = acc in
+            let%bind s, tys, es_c = acc in
             let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
-            let%map s', ty = infer ctx e in
-            Subst.compose s s', ty :: tys)
+            let%map s', ty, e_c = infer ctx e in
+            Subst.compose s s', ty :: tys, e_c :: es_c)
           es
       in
       let tys = List.map ~f:(Subst.apply_type ~sub:s) tys in
-      s, Type.TProd (List.rev tys)
+      let t = Type.TProd (List.rev tys) in
+      s, t, Core.Expr.Tuple (List.rev es_c, t)
   ;;
 
-  let typecheck ctx e = infer ctx e |> Result.map ~f:(fun (_, t) -> t)
+  let typecheck ctx e = infer ctx e |> Result.map ~f:(fun (_, t, _) -> t)
 end
 
 module Ty = struct
@@ -270,7 +298,7 @@ module Decl = struct
     let open Result.Let_syntax in
     match d with
     | ValDecl (x, e) ->
-      let%map s, ty = Expr.infer ctx e in
+      let%map s, ty, _ = Expr.infer ctx e in
       let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
       let sc = generalise ctx ty in
       Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc)
