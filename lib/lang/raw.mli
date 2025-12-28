@@ -45,8 +45,8 @@ end
 
 module Ty : sig
   type t =
-    | Id of id
-    | App of id * t list
+    | Var of id
+    | Con of id * t list
     | Prod of t list
     | Fun of t * t
 

@@ -35,7 +35,8 @@ td ('a) maybe :=
   | Just of 'a
   | Nothing
         |}
-  ; ast = [ TypeDecl ("maybe", [ "'a" ], [ "Just", Some (Ty.Id "'a"); "Nothing", None ]) ]
+  ; ast =
+      [ TypeDecl ("maybe", [ "'a" ], [ "Just", Some (Ty.Var "'a"); "Nothing", None ]) ]
   }
 ;;
 
@@ -55,7 +56,7 @@ vd length := fun l ->
       [ TypeDecl
           ( "list"
           , [ "'a" ]
-          , [ "Cons", Some (Ty.Prod [ Ty.Id "'a"; Ty.App ("list", [ Ty.Id "'a" ]) ])
+          , [ "Cons", Some (Ty.Prod [ Ty.Var "'a"; Ty.Con ("list", [ Ty.Var "'a" ]) ])
             ; "Nil", None
             ] )
       ; Decl.ValDecl
@@ -97,19 +98,22 @@ td ('a, 'b) test :=
               , Some
                   (Ty.Fun
                      ( Ty.Prod
-                         [ Ty.App
+                         [ Ty.Con
                              ( "option"
-                             , [ Ty.App ("tri", [ Ty.Id "'a"; Ty.Id "'b"; Ty.Id "int" ]) ]
-                             )
-                         ; Ty.Id "char"
+                             , [ Ty.Con
+                                   ( "tri"
+                                   , [ Ty.Var "'a"; Ty.Var "'b"; Ty.Con ("int", []) ] )
+                               ] )
+                         ; Ty.Con ("char", [])
                          ]
                      , Ty.Fun
                          ( Ty.Prod
-                             [ Ty.Id "lol"
-                             ; Ty.Id "int"
-                             ; Ty.App ("types", [ Ty.App ("chain", [ Ty.Id "long" ]) ])
+                             [ Ty.Con ("lol", [])
+                             ; Ty.Con ("int", [])
+                             ; Ty.Con
+                                 ("types", [ Ty.Con ("chain", [ Ty.Con ("long", []) ]) ])
                              ]
-                         , Ty.App ("result", [ Ty.Id "'a"; Ty.Id "'b" ]) ) )) )
+                         , Ty.Con ("result", [ Ty.Var "'a"; Ty.Var "'b" ]) ) )) )
             ] )
       ]
   }

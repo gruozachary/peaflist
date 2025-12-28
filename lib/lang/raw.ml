@@ -231,8 +231,8 @@ end
 
 module Ty = struct
   type t =
-    | Id of id
-    | App of id * t list
+    | Var of id
+    | Con of id * t list
     | Prod of t list
     | Fun of t * t
   [@@deriving eq]
@@ -240,7 +240,7 @@ module Ty = struct
   let rec to_type ~vm t =
     let open Option.Let_syntax in
     match t with
-    | Id x ->
+    | Var x ->
       let%map tv = Map.find vm x in
       Type.TVar tv
     | Fun (t, t') ->
@@ -250,7 +250,7 @@ module Ty = struct
     | Prod ts ->
       let%map tys = Option.all (List.map ~f:(to_type ~vm) ts) in
       Type.TProd tys
-    | App (x, ts) ->
+    | Con (x, ts) ->
       let%map tys = Option.all (List.map ~f:(to_type ~vm) ts) in
       Type.TCon (x, tys)
   ;;
