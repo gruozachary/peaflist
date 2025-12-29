@@ -4,6 +4,14 @@ type id = string
 type ty_id = string
 type ty_var = string
 
+module Ident : sig
+  type t
+
+  val of_int : int -> t
+
+  include Comparable.S with type t := t
+end
+
 module Pat : sig
   type t =
     | Int of int

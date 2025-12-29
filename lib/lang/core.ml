@@ -4,6 +4,17 @@ type id = string
 type ty_id = string
 type ty_var = string
 
+module Ident = struct
+  module T = struct
+    type t = int [@@deriving compare, sexp_of]
+
+    let of_int x = x
+  end
+
+  include T
+  include Comparable.Make (T)
+end
+
 module Pat = struct
   type t =
     | Int of int
