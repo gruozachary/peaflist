@@ -4,10 +4,15 @@ type t =
   { env : Term_env.t
   ; tenv : Type_env.t
   ; state : Analyser_state.t
+  ; renamer : Renamer.t
   }
 
 let empty () =
-  { env = Term_env.empty (); state = Analyser_state.create (); tenv = Type_env.empty }
+  { env = Term_env.empty ()
+  ; state = Analyser_state.create ()
+  ; tenv = Type_env.empty
+  ; renamer = Renamer.empty ()
+  }
 ;;
 
 module Env = struct
@@ -22,4 +27,9 @@ end
 
 module State = struct
   let get ctx = ctx.state
+end
+
+module Renamer = struct
+  let get ctx = ctx.renamer
+  let map ctx ~f = { ctx with renamer = f ctx.renamer }
 end
