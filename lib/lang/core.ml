@@ -8,7 +8,8 @@ module Ident = struct
   module T = struct
     type t = int [@@deriving compare, sexp_of]
 
-    let of_int x = x
+    let zero = 0
+    let succ x = x + 1
   end
 
   include T
