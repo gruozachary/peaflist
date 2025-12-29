@@ -1,16 +1,16 @@
 open! Base
 
 type t =
-  { mutable next_tv : int
+  { mutable next_tv : Type_var.t
   ; mutable next_ident : Core.Ident.t
   }
 
-let create () = { next_tv = 0; next_ident = Core.Ident.zero }
+let create () = { next_tv = Type_var.zero; next_ident = Core.Ident.zero }
 
 let fresh_tv s =
   let v = s.next_tv in
-  s.next_tv <- v + 1;
-  Type_var.of_int v
+  s.next_tv <- Type_var.succ s.next_tv;
+  v
 ;;
 
 let fresh s = Type.TVar (fresh_tv s)
