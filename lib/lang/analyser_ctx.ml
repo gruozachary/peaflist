@@ -11,7 +11,7 @@ let empty () =
   { env = Term_env.empty ()
   ; state = Analyser_state.create ()
   ; tenv = Type_env.empty
-  ; renamer = Renamer.empty ()
+  ; renamer = Renamer.empty
   }
 ;;
 

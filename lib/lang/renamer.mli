@@ -1,7 +1,9 @@
 open! Base
 
 type t
+type heart
 
-val empty : unit -> t
-val declare : t -> str:string -> t
+val fresh_heart : unit -> heart
+val empty : t
+val declare : t -> heart:heart -> str:string -> t
 val fetch : t -> str:string -> Ident.t Option.t

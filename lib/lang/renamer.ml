@@ -1,17 +1,15 @@
 open! Base
 
-type t =
-  { map : (string, Ident.t, String.comparator_witness) Map.t
-  ; mutable next_ident : Ident.t
-  }
+type t = (string, Ident.t, String.comparator_witness) Map.t
+type heart = { mutable next_ident : Ident.t }
 
-let empty () = { map = Map.empty (module String); next_ident = Ident.zero }
+let fresh_heart () = { next_ident = Ident.zero }
+let empty = Map.empty (module String)
 
-let declare r ~str =
-  let i = r.next_ident in
-  r.next_ident <- Ident.succ r.next_ident;
-  { r with map = Map.set r.map ~key:str ~data:i }
+let declare r ~heart ~str =
+  let i = heart.next_ident in
+  heart.next_ident <- Ident.succ heart.next_ident;
+  Map.set r ~key:str ~data:i
 ;;
 
-(* val fetch : t -> str:string -> Ident.t Option.t *)
-let fetch r ~str = Map.find r.map str
+let fetch r ~str = Map.find r str
