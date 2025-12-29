@@ -3,4 +3,4 @@ type t
 val create : unit -> t
 val fresh_tv : t -> Type_var.t
 val fresh : t -> Type.t
-val next_ident : t -> Core.Ident.t
+val next_ident : t -> Ident.t
