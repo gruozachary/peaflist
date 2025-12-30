@@ -1,6 +1,6 @@
 open! Base
 
-type t = Forall of Type_var.t list * Type.t
+type t = Forall of Type_var.t list * Type.t [@@deriving sexp_of]
 
 let to_string (Forall (qs, t)) =
   (List.map qs ~f:Type_var.to_string

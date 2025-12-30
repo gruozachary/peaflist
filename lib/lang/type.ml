@@ -5,6 +5,7 @@ type t =
   | TFun of t * t
   | TProd of t list
   | TCon of string * t list
+[@@deriving sexp_of]
 
 let prec = function
   | TVar _ -> 3

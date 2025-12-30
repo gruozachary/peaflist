@@ -108,16 +108,15 @@ let handle_command toplevel_ctx cmd =
         acc ^ "\n" ^ _name ^ ": " ^ _description ^ " (:" ^ cmd ^ ")")
     |> Stdio.print_endline;
     Ok false
-  | Line.CommandKind.TypeOf (Either.First x) ->
-    let%map scheme =
-      Lang.Analyser_ctx.Env.get toplevel_ctx.semantic_ctx
-      |> Lang.Term_env.lookup ~id:x
-      |> of_option ~error:"Unbound variable identifier"
+  | Line.CommandKind.TypeOf (Either.First ident_str) ->
+    let%map _, scheme =
+      Lang.Analyser_ctx.fetch_and_lookup toplevel_ctx.semantic_ctx ~ident_str
+      |> Result.of_option ~error:"Unbound variable"
     in
     Stdio.print_endline (Lang.Scheme.to_string scheme);
     false
   | Line.CommandKind.TypeOf (Either.Second e) ->
-    let%map ty = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
+    let%map ty, _ = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
     Stdio.print_endline (Lang.Type.to_string ty);
     false
   | Line.CommandKind.TypeInfo x ->
@@ -141,10 +140,11 @@ let run toplevel_ctx =
   in
   match%bind Line.parse line |> of_option ~error:"Parse of input failed." with
   | Line.Expr e ->
-    let%map _ = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
+    let%map _, core = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
+    Stdio.print_endline (Lang.Core.Expr.sexp_of_t core |> Sexp.to_string_hum);
     false
   | Line.Decl d ->
-    let%map ctx = Lang.Raw.Decl.typecheck toplevel_ctx.semantic_ctx d in
+    let%map ctx, _ = Lang.Raw.Decl.typecheck toplevel_ctx.semantic_ctx d in
     toplevel_ctx.semantic_ctx <- ctx;
     false
   | Line.Command cmd -> handle_command toplevel_ctx cmd

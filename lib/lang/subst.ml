@@ -72,3 +72,14 @@ let rec unify ty0 ty1 =
     unify (Type.TProd tys) (Type.TProd tys')
   | _ -> Result.Error "Type unification failed"
 ;;
+
+let rec zonk_type ~sub ty =
+  match ty with
+  | Type.TVar x ->
+    (match Map.find sub x with
+     | Some ty' -> zonk_type ~sub ty'
+     | None -> ty)
+  | Type.TFun (ty0, ty1) -> TFun (zonk_type ~sub ty0, zonk_type ~sub ty1)
+  | Type.TProd tys -> TProd (List.map tys ~f:(fun ty -> zonk_type ~sub ty))
+  | Type.TCon (tvar, tys) -> TCon (tvar, List.map tys ~f:(fun ty -> zonk_type ~sub ty))
+;;
