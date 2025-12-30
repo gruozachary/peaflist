@@ -372,8 +372,14 @@ module Decl = struct
           let scheme =
             match t_opt with
             | Option.Some t ->
-              (match Ty.to_type ~renamer:(Analyser_ctx.Type_ident_renamer.get ctx) ~vm:tv_map t with
-               | Option.Some ty -> Scheme.Forall (tvs, Type.TFun (ty, Type.TCon (ident, tyvs)))
+              (match
+                 Ty.to_type
+                   ~renamer:(Analyser_ctx.Type_ident_renamer.get ctx)
+                   ~vm:tv_map
+                   t
+               with
+               | Option.Some ty ->
+                 Scheme.Forall (tvs, Type.TFun (ty, Type.TCon (ident, tyvs)))
                | Option.None -> assert false)
             | Option.None -> Scheme.Forall (tvs, Type.TCon (ident, tyvs))
           in
