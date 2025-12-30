@@ -8,10 +8,11 @@ type t =
   }
 
 let empty () =
+  let state = Analyser_state.create () in
   { env = Term_env.empty ()
-  ; state = Analyser_state.create ()
+  ; state
   ; tenv = Type_env.empty
-  ; renamer = Renamer.empty
+  ; renamer = Renamer.empty (Analyser_state.renamer_heart state)
   }
 ;;
 
