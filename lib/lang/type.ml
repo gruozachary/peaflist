@@ -4,7 +4,7 @@ type t =
   | TVar of Type_var.t
   | TFun of t * t
   | TProd of t list
-  | TCon of string * t list
+  | TCon of Type_ident.t * t list
 [@@deriving sexp_of]
 
 let prec = function
@@ -23,15 +23,15 @@ let rec to_string ty =
     List.map ~f:go ts
     |> List.intersperse ~sep:" * "
     |> List.fold ~init:"" ~f:String.append
-  | TCon (x, []) -> x
-  | TCon (x, [ t ]) -> go t ^ " " ^ x
-  | TCon (x, ts) ->
+  | TCon (ident, []) -> Type_ident.to_string ident
+  | TCon (ident, [ t ]) -> go t ^ " " ^ Type_ident.to_string ident
+  | TCon (ident, ts) ->
     "("
     ^ (List.map ~f:go ts
        |> List.intersperse ~sep:" "
        |> List.fold ~init:"" ~f:String.append)
     ^ ") "
-    ^ x
+    ^ Type_ident.to_string ident
 ;;
 
 let rec free_tvars = function
