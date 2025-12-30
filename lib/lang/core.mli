@@ -23,7 +23,7 @@ end
 module Decl : sig
   type t =
     | ValDecl of Ident.t * Expr.t
-    | TypeDecl of Ident.t
+    | TypeDecl of string
 end
 
 module Prog : sig

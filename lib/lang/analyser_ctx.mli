@@ -1,7 +1,6 @@
 type t
 
 val empty : unit -> t
-
 val fetch_and_lookup : t -> ident_str:string -> (Ident.t * Scheme.t) option
 val declare_and_introduce : t -> ident_str:string -> scheme:Scheme.t -> Ident.t * t
 

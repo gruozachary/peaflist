@@ -174,7 +174,9 @@ module Expr = struct
        | Option.None -> Result.Error "Unbound constructor")
     | Lambda (ident_str, e) ->
       let ty = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
-      let ident, ctx = Analyser_ctx.declare_and_introduce ctx ~ident_str ~scheme:(Scheme.of_type ty) in
+      let ident, ctx =
+        Analyser_ctx.declare_and_introduce ctx ~ident_str ~scheme:(Scheme.of_type ty)
+      in
       let%map s, ty', e_c = infer ctx e in
       ( s
       , Type.TFun (Subst.apply_type ~sub:s ty, Subst.apply_type ~sub:s ty')
@@ -335,8 +337,7 @@ module Decl = struct
       let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
       let scheme = generalise ctx ty in
       let ident, ctx = Analyser_ctx.declare_and_introduce ctx ~ident_str ~scheme in
-      ( ctx
-      , Core.Decl.ValDecl (ident, e_c) )
+      ctx, Core.Decl.ValDecl (ident, e_c)
     | TypeDecl (x, utvs, ctors) ->
       let arity = List.length utvs in
       let get_tvs () =
@@ -352,12 +353,12 @@ module Decl = struct
       in
       let ctx = Analyser_ctx.Tenv.map ctx ~f:(Type_env.introduce ~id:x ~arity) in
       let%map ctx =
-        List.fold ctors ~init:(Result.Ok ctx) ~f:(fun ctx_opt (y, t_opt) ->
+        List.fold ctors ~init:(Result.Ok ctx) ~f:(fun ctx_opt (ident_str, t_opt) ->
           let%bind ctx = ctx_opt in
           let%map tv_map = get_tvs () in
           let tvs = Map.data tv_map in
           let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
-          let sc =
+          let scheme =
             match t_opt with
             | Option.Some t ->
               (match Ty.to_type ~vm:tv_map t with
@@ -365,7 +366,8 @@ module Decl = struct
                | Option.None -> assert false)
             | Option.None -> Scheme.Forall (tvs, Type.TCon (x, tyvs))
           in
-          Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:y ~sc))
+          let _, ctx = Analyser_ctx.declare_and_introduce ctx ~ident_str ~scheme in
+          ctx)
       in
       ctx, Core.Decl.TypeDecl x
   ;;

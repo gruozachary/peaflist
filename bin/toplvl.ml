@@ -108,11 +108,10 @@ let handle_command toplevel_ctx cmd =
         acc ^ "\n" ^ _name ^ ": " ^ _description ^ " (:" ^ cmd ^ ")")
     |> Stdio.print_endline;
     Ok false
-  | Line.CommandKind.TypeOf (Either.First x) ->
-    let%map scheme =
-      Lang.Analyser_ctx.Env.get toplevel_ctx.semantic_ctx
-      |> Lang.Term_env.lookup ~id:x
-      |> of_option ~error:"Unbound variable identifier"
+  | Line.CommandKind.TypeOf (Either.First ident_str) ->
+    let%map _, scheme =
+      Lang.Analyser_ctx.fetch_and_lookup toplevel_ctx.semantic_ctx ~ident_str
+      |> Result.of_option ~error:"Unbound variable"
     in
     Stdio.print_endline (Lang.Scheme.to_string scheme);
     false
