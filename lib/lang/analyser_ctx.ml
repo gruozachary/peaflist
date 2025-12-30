@@ -16,6 +16,23 @@ let empty () =
   }
 ;;
 
+let fetch_and_lookup ctx ~ident_str =
+  let open Option.Let_syntax in
+  let%bind ident = Renamer.fetch ctx.renamer ~str:ident_str in
+  let%map scheme = ctx.env |> Term_env.lookup ~id:ident in
+  ident, scheme
+;;
+
+let declare_and_introduce ctx ~ident_str ~scheme =
+  let ident, r =
+    Renamer.declare_and_fetch
+      ctx.renamer
+      ~heart:(Analyser_state.renamer_heart ctx.state)
+      ~str:ident_str
+  in
+  ident, { ctx with renamer = r; env = Term_env.introduce ctx.env ~id:ident ~sc:scheme }
+;;
+
 module Env = struct
   let get ctx = ctx.env
   let map ctx ~f = { ctx with env = f ctx.env }

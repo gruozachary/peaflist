@@ -32,27 +32,6 @@ let generalise ctx ty =
   Scheme.Forall (Set.diff ty_tvs env_tvs |> Set.to_list, ty)
 ;;
 
-let fetch_and_lookup ctx ~ident_str =
-  let open Option.Let_syntax in
-  let%bind ident = Analyser_ctx.Renamer.get ctx |> Renamer.fetch ~str:ident_str in
-  let%map scheme = Analyser_ctx.Env.get ctx |> Term_env.lookup ~id:ident in
-  ident, scheme
-;;
-
-let declare_and_introduce ctx ~ident_str ~scheme =
-  let ident, r =
-    Analyser_ctx.Renamer.get ctx
-    |> Renamer.declare_and_fetch
-         ~heart:(Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
-         ~str:ident_str
-  in
-  let ctx =
-    Analyser_ctx.Renamer.map ctx ~f:(fun _ -> r)
-    |> Analyser_ctx.Env.map ~f:(Term_env.introduce ~id:ident ~sc:scheme)
-  in
-  ident, ctx
-;;
-
 module Pat = struct
   type t =
     | Int of int
@@ -182,20 +161,20 @@ module Expr = struct
     let open Result.Let_syntax in
     match e with
     | Id ident_str ->
-      (match fetch_and_lookup ctx ~ident_str with
+      (match Analyser_ctx.fetch_and_lookup ctx ~ident_str with
        | Option.Some (ident, sc) ->
          let ty = instantiate ctx sc in
          Result.Ok (Subst.empty, ty, Core.Expr.Id (ident, ty))
        | Option.None -> Result.Error "Unbound variable")
     | Constr ident_str ->
-      (match fetch_and_lookup ctx ~ident_str with
+      (match Analyser_ctx.fetch_and_lookup ctx ~ident_str with
        | Option.Some (ident, sc) ->
          let ty = instantiate ctx sc in
          Result.Ok (Subst.empty, ty, Core.Expr.Constr (ident, ty))
        | Option.None -> Result.Error "Unbound constructor")
     | Lambda (ident_str, e) ->
       let ty = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
-      let ident, ctx = declare_and_introduce ctx ~ident_str ~scheme:(Scheme.of_type ty) in
+      let ident, ctx = Analyser_ctx.declare_and_introduce ctx ~ident_str ~scheme:(Scheme.of_type ty) in
       let%map s, ty', e_c = infer ctx e in
       ( s
       , Type.TFun (Subst.apply_type ~sub:s ty, Subst.apply_type ~sub:s ty')
@@ -213,7 +192,7 @@ module Expr = struct
       let%bind s, ty, e_c = infer ctx e in
       let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
       let scheme = generalise ctx ty in
-      let ident, ctx = declare_and_introduce ctx ~ident_str ~scheme in
+      let ident, ctx = Analyser_ctx.declare_and_introduce ctx ~ident_str ~scheme in
       let%map s', ty', e_c' = infer ctx e' in
       Subst.compose s s', ty', Core.Expr.Let (ident, scheme, e_c, e_c')
     | Group e -> infer ctx e
@@ -355,7 +334,7 @@ module Decl = struct
       let%map s, ty, e_c = Expr.infer ctx e in
       let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
       let scheme = generalise ctx ty in
-      let ident, ctx = declare_and_introduce ctx ~ident_str ~scheme in
+      let ident, ctx = Analyser_ctx.declare_and_introduce ctx ~ident_str ~scheme in
       ( ctx
       , Core.Decl.ValDecl (ident, e_c) )
     | TypeDecl (x, utvs, ctors) ->
