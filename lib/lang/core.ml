@@ -21,7 +21,7 @@ module Expr = struct
   type t =
     | Int of int
     | Id of Ident.t * Type.t
-    | Constr of Ident.t * Type.t
+    | Constr of Ident.t * t List.t * Type.t
     | Apply of t * t * Type.t
     | Lambda of Ident.t * Type.t * t
     | Let of Ident.t * Scheme.t * t * t
@@ -32,7 +32,8 @@ module Expr = struct
   let rec zonk sub = function
     | Int x -> Int x
     | Id (ident, t) -> Id (ident, Subst.zonk_type ~sub t)
-    | Constr (ident, t) -> Constr (ident, Subst.zonk_type ~sub t)
+    | Constr (ident, es, t) ->
+      Constr (ident, List.map ~f:(zonk sub) es, Subst.zonk_type ~sub t)
     | Apply (e, e', t) -> Apply (zonk sub e, zonk sub e', Subst.zonk_type ~sub t)
     | Lambda (ident, t, e) -> Lambda (ident, Subst.zonk_type ~sub t, zonk sub e)
     | Let (ident, scheme, e, e') ->
