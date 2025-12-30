@@ -46,13 +46,18 @@ let type_fetch_and_lookup ctx ~ident_str =
 
 let type_declare_and_introduce ctx ~ident_str ~arity =
   let open Option.Let_syntax in
+  let%map () =
+    match Renamer.fetch ctx.type_ident_renamer ~str:ident_str with
+    | Option.Some _ -> Option.None
+    | Option.None -> Option.Some ()
+  in
   let ident, r =
     Renamer.declare_and_fetch
       ctx.type_ident_renamer
       ~heart:(Analyser_state.type_ident_renamer_heart ctx.state)
       ~str:ident_str
   in
-  let%map tenv = Type_env.introduce ctx.tenv ~id:ident ~arity in
+  let tenv = Type_env.introduce ctx.tenv ~id:ident ~arity in
   ident, { ctx with type_ident_renamer = r; tenv }
 ;;
 
