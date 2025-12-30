@@ -1,45 +1,29 @@
 open! Base
 
-type id = string
-type ty_id = string
-type ty_var = string
-
-module Ident = struct
-  module T = struct
-    type t = int [@@deriving compare, sexp_of]
-
-    let zero = 0
-    let succ x = x + 1
-  end
-
-  include T
-  include Comparable.Make (T)
-end
-
 module Pat = struct
   type t =
     | Int of int
-    | Ident of id * Type.t
+    | Ident of Ident.t * Type.t
     | Tuple of t list * Type.t
-    | CtorApp of id * t Option.t * Type.t
+    | CtorApp of Ident.t * t Option.t * Type.t
 end
 
 module Expr = struct
   type t =
     | Int of int
-    | Id of id * Type.t
-    | Constr of id * Type.t
+    | Id of Ident.t * Type.t
+    | Constr of Ident.t * Type.t
     | Apply of t * t * Type.t
-    | Lambda of id * Type.t * t
-    | Let of id * Scheme.t * t * t
+    | Lambda of Ident.t * Type.t * t
+    | Let of Ident.t * Scheme.t * t * t
     | Match of t * (Pat.t * t) list * Type.t
     | Tuple of t list * Type.t
 end
 
 module Decl = struct
   type t =
-    | ValDecl of id * Expr.t
-    | TypeDecl of id
+    | ValDecl of Ident.t * Expr.t
+    | TypeDecl of Ident.t
 end
 
 module Prog = struct

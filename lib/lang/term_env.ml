@@ -1,6 +1,6 @@
 open! Base
 
-type t = (string, Scheme.t, String.comparator_witness) Map.t
+type t = (Ident.t, Scheme.t, Ident.comparator_witness) Map.t
 
 module Merge_element = struct
   include Map.Merge_element
@@ -8,7 +8,7 @@ module Merge_element = struct
   type nonrec t = (Scheme.t, Scheme.t) t
 end
 
-let empty () = Map.empty (module String)
+let empty () = Map.empty (module Ident)
 let introduce env ~id ~sc = Map.set env ~key:id ~data:sc
 let lookup env ~id = Map.find env id
 let map env ~f = Map.map ~f env
