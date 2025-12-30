@@ -32,6 +32,27 @@ let generalise ctx ty =
   Scheme.Forall (Set.diff ty_tvs env_tvs |> Set.to_list, ty)
 ;;
 
+let fetch_and_lookup ctx ~ident_str =
+  let open Option.Let_syntax in
+  let%bind ident = Analyser_ctx.Renamer.get ctx |> Renamer.fetch ~str:ident_str in
+  let%map scheme = Analyser_ctx.Env.get ctx |> Term_env.lookup ~id:ident in
+  ident, scheme
+;;
+
+let declare_and_introduce ctx ~ident_str ~scheme =
+  let ident, r =
+    Analyser_ctx.Renamer.get ctx
+    |> Renamer.declare_and_fetch
+         ~heart:(Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
+         ~str:ident_str
+  in
+  let ctx =
+    Analyser_ctx.Renamer.map ctx ~f:(fun _ -> r)
+    |> Analyser_ctx.Env.map ~f:(Term_env.introduce ~id:ident ~sc:scheme)
+  in
+  ident, ctx
+;;
+
 module Pat = struct
   type t =
     | Int of int
@@ -160,27 +181,25 @@ module Expr = struct
   let rec infer ctx e =
     let open Result.Let_syntax in
     match e with
-    | Id x ->
-      (match Analyser_ctx.Env.get ctx |> Term_env.lookup ~id:x with
-       | Option.Some sc ->
+    | Id ident_str ->
+      (match fetch_and_lookup ctx ~ident_str with
+       | Option.Some (ident, sc) ->
          let ty = instantiate ctx sc in
-         Result.Ok (Subst.empty, ty, Core.Expr.Id (x, ty))
+         Result.Ok (Subst.empty, ty, Core.Expr.Id (ident, ty))
        | Option.None -> Result.Error "Unbound variable")
-    | Constr x ->
-      (match Analyser_ctx.Env.get ctx |> Term_env.lookup ~id:x with
-       | Option.Some sc ->
+    | Constr ident_str ->
+      (match fetch_and_lookup ctx ~ident_str with
+       | Option.Some (ident, sc) ->
          let ty = instantiate ctx sc in
-         Result.Ok (Subst.empty, ty, Core.Expr.Constr (x, ty))
+         Result.Ok (Subst.empty, ty, Core.Expr.Constr (ident, ty))
        | Option.None -> Result.Error "Unbound constructor")
-    | Lambda (x, e) ->
+    | Lambda (ident_str, e) ->
       let ty = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
-      let ctx =
-        Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc:(Scheme.of_type ty))
-      in
+      let ident, ctx = declare_and_introduce ctx ~ident_str ~scheme:(Scheme.of_type ty) in
       let%map s, ty', e_c = infer ctx e in
       ( s
       , Type.TFun (Subst.apply_type ~sub:s ty, Subst.apply_type ~sub:s ty')
-      , Core.Expr.Lambda (x, ty, e_c) )
+      , Core.Expr.Lambda (ident, ty, e_c) )
     | Apply (ef, e) ->
       let%bind s, tyf, ef_c = infer ctx ef in
       let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
@@ -190,14 +209,13 @@ module Expr = struct
       ( Subst.compose (Subst.compose s s') s''
       , Subst.apply_type ~sub:s'' tyv
       , Core.Expr.Apply (ef_c, e_c, tyv) )
-    | Binding (x, e, e') ->
+    | Binding (ident_str, e, e') ->
       let%bind s, ty, e_c = infer ctx e in
       let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
-      let sc = generalise ctx ty in
-      let%map s', ty', e_c' =
-        infer (Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc)) e'
-      in
-      Subst.compose s s', ty', Core.Expr.Let (x, sc, e_c, e_c')
+      let scheme = generalise ctx ty in
+      let ident, ctx = declare_and_introduce ctx ~ident_str ~scheme in
+      let%map s', ty', e_c' = infer ctx e' in
+      Subst.compose s s', ty', Core.Expr.Let (ident, scheme, e_c, e_c')
     | Group e -> infer ctx e
     | Int x -> Result.Ok (Subst.empty, Type.TCon ("int", []), Core.Expr.Int x)
     | BinOp (el, o, er) ->
@@ -219,11 +237,15 @@ module Expr = struct
          , Core.Expr.Apply
              ( Core.Expr.Apply
                  ( Core.Expr.Id
-                     ( (match o with
-                        | Div -> "/"
-                        | Mul -> "*"
-                        | Plus -> "+"
-                        | Sub -> "-")
+                     ( Analyser_ctx.Renamer.get ctx
+                       |> Renamer.fetch
+                            ~str:
+                              (match o with
+                               | Div -> "/"
+                               | Mul -> "*"
+                               | Plus -> "+"
+                               | Sub -> "-")
+                       |> Option.value_exn
                      , Type.TFun
                          ( Type.TCon ("int", [])
                          , Type.TFun (Type.TCon ("int", []), Type.TCon ("int", [])) ) )
@@ -239,21 +261,21 @@ module Expr = struct
           arms
           ~f:(fun acc (p, e) ->
             let%bind s, ts, arms_c = acc in
-            let%bind s_pat, g, t_pat, p_c = Pat.infer ctx p in
+            let%bind s_pat, g, r, t_pat, p_c = Pat.infer ctx p in
             let s = Subst.compose s s_pat in
             let%bind s_uni =
               Subst.unify (Subst.apply_type ~sub:s t_pat) (Subst.apply_type ~sub:s t_opr)
             in
             let s = Subst.compose s s_uni in
             let ctx =
-              Analyser_ctx.Env.map
-                ctx
-                ~f:
-                  (Term_env.merge g ~f:(fun ~key:_ m ->
-                     match m with
-                     | `Left x -> Option.Some x
-                     | `Right x -> Option.Some x
-                     | `Both (_, r) -> Option.Some r))
+              Analyser_ctx.Renamer.map ctx ~f:(fun x -> Renamer.merge r x)
+              |> Analyser_ctx.Env.map
+                   ~f:
+                     (Term_env.merge g ~f:(fun ~key:_ m ->
+                        match m with
+                        | `Left x -> Option.Some x
+                        | `Right x -> Option.Some x
+                        | `Both (_, r) -> Option.Some r))
             in
             let%map s_exp, t_exp, e_c = infer ctx e in
             Subst.compose s s_exp, t_exp :: ts, (p_c, e_c) :: arms_c)
@@ -329,12 +351,13 @@ module Decl = struct
   let typecheck ctx d =
     let open Result.Let_syntax in
     match d with
-    | ValDecl (x, e) ->
+    | ValDecl (ident_str, e) ->
       let%map s, ty, e_c = Expr.infer ctx e in
       let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
-      let sc = generalise ctx ty in
-      ( Analyser_ctx.Env.map ctx ~f:(Term_env.introduce ~id:x ~sc)
-      , Core.Decl.ValDecl (x, e_c) )
+      let scheme = generalise ctx ty in
+      let ident, ctx = declare_and_introduce ctx ~ident_str ~scheme in
+      ( ctx
+      , Core.Decl.ValDecl (ident, e_c) )
     | TypeDecl (x, utvs, ctors) ->
       let arity = List.length utvs in
       let get_tvs () =
