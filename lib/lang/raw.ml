@@ -43,41 +43,72 @@ module Pat = struct
   let rec infer ctx p =
     let open Result.Let_syntax in
     match p with
-    | CtorApp (x, po) ->
+    | CtorApp (ident_str, po) ->
+      let%bind ident =
+        Analyser_ctx.Renamer.get ctx
+        |> Renamer.fetch ~str:ident_str
+        |> Result.of_option ~error:"Constructor name unrecognised"
+      in
       let%bind t =
         Result.of_option
           ~error:"Unbound constructor in pattern"
           (Option.map
-             (Analyser_ctx.Env.get ctx |> Term_env.lookup ~id:x)
+             (Analyser_ctx.Env.get ctx |> Term_env.lookup ~id:ident)
              ~f:(instantiate ctx))
       in
       (match t, po with
        | Type.TFun _, Option.Some p ->
-         let%bind s, g, t', p_c = infer ctx p in
+         let%bind s, g, r, t', p_c = infer ctx p in
          let t'' = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
          let%map s' = Subst.unify (Type.TFun (t', t'')) t in
          let s'' = Subst.compose s s' in
-         s'', g, Subst.apply_type ~sub:s'' t'', Core.Pat.CtorApp (x, Option.Some p_c, t'')
+         ( s''
+         , g
+         , r
+         , Subst.apply_type ~sub:s'' t''
+         , Core.Pat.CtorApp (ident, Option.Some p_c, t'') )
        | Type.TCon _, Option.None ->
          Result.Ok
-           (Subst.empty, Term_env.empty (), t, Core.Pat.CtorApp (x, Option.None, t))
+           ( Subst.empty
+           , Term_env.empty ()
+           , Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
+           , t
+           , Core.Pat.CtorApp (ident, Option.None, t) )
        | _ -> Result.Error "Constructor arity mismatch in pattern")
-    | Ident x ->
+    | Ident ident_str ->
       let t = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
+      let ident, r =
+        Analyser_ctx.Renamer.get ctx
+        |> Renamer.declare_and_fetch
+             ~str:ident_str
+             ~heart:(Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
+      in
       Result.Ok
         ( Subst.empty
-        , Term_env.introduce ~id:x ~sc:(Scheme.of_type t) (Term_env.empty ())
+        , Term_env.introduce ~id:ident ~sc:(Scheme.of_type t) (Term_env.empty ())
+        , r
         , t
-        , Core.Pat.Ident (x, t) )
+        , Core.Pat.Ident (ident, t) )
     | Int x ->
-      Result.Ok (Subst.empty, Term_env.empty (), Type.TCon ("int", []), Core.Pat.Int x)
+      Result.Ok
+        ( Subst.empty
+        , Term_env.empty ()
+        , Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
+        , Type.TCon ("int", [])
+        , Core.Pat.Int x )
     | Tuple ps ->
-      let%map s, g, ts, p_cs =
+      let%map s, g, r, ts, p_cs =
         List.fold
-          ~init:(Result.Ok (Subst.empty, Term_env.empty (), [], []))
+          ~init:
+            (Result.Ok
+               ( Subst.empty
+               , Term_env.empty ()
+               , Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
+               , []
+               , [] ))
           ~f:(fun sgo p ->
-            let%bind s, g, ts, p_cs = sgo in
-            let%bind s', g', t, p_c = infer ctx p in
+            let%bind s, g, r, ts, p_cs = sgo in
+            let%bind s', g', r', t, p_c = infer ctx p in
             let g = Subst.apply_term_env ~sub:s' g in
             let g'' =
               Term_env.merge g g' ~f:(fun ~key:_ m ->
@@ -93,12 +124,13 @@ module Pat = struct
             in
             ( Subst.compose s s'
             , g''
+            , Renamer.merge r r'
             , t :: List.map ~f:(Subst.apply_type ~sub:s') ts
             , p_c :: p_cs ))
           ps
       in
       let t = Type.TProd (List.rev ts) in
-      s, g, t, Core.Pat.Tuple (List.rev p_cs, t)
+      s, g, r, t, Core.Pat.Tuple (List.rev p_cs, t)
   ;;
 end
 
