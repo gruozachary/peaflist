@@ -355,7 +355,10 @@ module Decl = struct
         | `Ok x -> Result.Ok x
         | `Duplicate_key _ -> Result.Error "Duplicate type variable"
       in
-      let ctx = Analyser_ctx.Tenv.map ctx ~f:(Type_env.introduce ~id:x ~arity) in
+      let%bind _, ctx =
+        Analyser_ctx.type_declare_and_introduce ctx ~ident_str:x ~arity
+        |> Result.of_option ~error:"Type definition with that name already exists"
+      in
       let%map ctx =
         List.fold ctors ~init:(Result.Ok ctx) ~f:(fun ctx_opt (ident_str, t_opt) ->
           let%bind ctx = ctx_opt in
