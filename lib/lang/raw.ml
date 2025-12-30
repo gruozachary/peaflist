@@ -45,7 +45,7 @@ module Pat = struct
     match p with
     | CtorApp (ident_str, po) ->
       let%bind ident =
-        Analyser_ctx.Renamer.get ctx
+        Analyser_ctx.Ident_renamer.get ctx
         |> Renamer.fetch ~str:ident_str
         |> Result.of_option ~error:"Constructor name unrecognised"
       in
@@ -71,17 +71,18 @@ module Pat = struct
          Result.Ok
            ( Subst.empty
            , Term_env.empty ()
-           , Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
+           , Renamer.empty
+               (Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
            , t
            , Core.Pat.CtorApp (ident, Option.None, t) )
        | _ -> Result.Error "Constructor arity mismatch in pattern")
     | Ident ident_str ->
       let t = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let ident, r =
-        Analyser_ctx.Renamer.get ctx
+        Analyser_ctx.Ident_renamer.get ctx
         |> Renamer.declare_and_fetch
              ~str:ident_str
-             ~heart:(Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
+             ~heart:(Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
       in
       Result.Ok
         ( Subst.empty
@@ -93,7 +94,7 @@ module Pat = struct
       Result.Ok
         ( Subst.empty
         , Term_env.empty ()
-        , Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
+        , Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
         , Type.TCon ("int", [])
         , Core.Pat.Int x )
     | Tuple ps ->
@@ -103,7 +104,8 @@ module Pat = struct
             (Result.Ok
                ( Subst.empty
                , Term_env.empty ()
-               , Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
+               , Renamer.empty
+                   (Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
                , []
                , [] ))
           ~f:(fun sgo p ->
@@ -218,7 +220,7 @@ module Expr = struct
          , Core.Expr.Apply
              ( Core.Expr.Apply
                  ( Core.Expr.Id
-                     ( Analyser_ctx.Renamer.get ctx
+                     ( Analyser_ctx.Ident_renamer.get ctx
                        |> Renamer.fetch
                             ~str:
                               (match o with
@@ -249,7 +251,7 @@ module Expr = struct
             in
             let s = Subst.compose s s_uni in
             let ctx =
-              Analyser_ctx.Renamer.map ctx ~f:(fun x -> Renamer.merge r x)
+              Analyser_ctx.Ident_renamer.map ctx ~f:(fun x -> Renamer.merge r x)
               |> Analyser_ctx.Env.map
                    ~f:
                      (Term_env.merge g ~f:(fun ~key:_ m ->

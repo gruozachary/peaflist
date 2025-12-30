@@ -2,10 +2,16 @@ open! Base
 
 type t =
   { mutable next_tv : Type_var.t
-  ; renamer_heart : Renamer.heart
+  ; ident_renamer_heart : Ident.t Renamer.heart
+  ; type_ident_renamer_heart : Type_ident.t Renamer.heart
   }
 
-let create () = { next_tv = Type_var.zero; renamer_heart = Renamer.fresh_heart () }
+let create () =
+  { next_tv = Type_var.zero
+  ; ident_renamer_heart = Renamer.fresh_heart (module Ident)
+  ; type_ident_renamer_heart = Renamer.fresh_heart (module Type_ident)
+  }
+;;
 
 let fresh_tv s =
   let v = s.next_tv in
@@ -14,4 +20,5 @@ let fresh_tv s =
 ;;
 
 let fresh s = Type.TVar (fresh_tv s)
-let renamer_heart s = s.renamer_heart
+let ident_renamer_heart s = s.ident_renamer_heart
+let type_ident_renamer_heart s = s.type_ident_renamer_heart

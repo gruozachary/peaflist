@@ -18,7 +18,12 @@ module State : sig
   val get : t -> Analyser_state.t
 end
 
-module Renamer : sig
-  val get : t -> Renamer.t
-  val map : t -> f:(Renamer.t -> Renamer.t) -> t
+module Ident_renamer : sig
+  val get : t -> Ident.t Renamer.t
+  val map : t -> f:(Ident.t Renamer.t -> Ident.t Renamer.t) -> t
+end
+
+module Type_ident_renamer : sig
+  val get : t -> Type_ident.t Renamer.t
+  val map : t -> f:(Type_ident.t Renamer.t -> Type_ident.t Renamer.t) -> t
 end

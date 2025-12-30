@@ -6,11 +6,11 @@ module type Term_env_pub = sig
   with type t = Term_env.t
 
 module type Renamer_pub = sig
-    type t
+    type 'mono t
 
-    val fetch : t -> str:string -> Ident.t Option.t
+    val fetch : 'mono t -> str:string -> 'mono Option.t
   end
-  with type t = Renamer.t
+  with type 'mono t = 'mono Renamer.t
 
 module type Type_env_pub = sig
     type t
@@ -34,8 +34,8 @@ module type Analyser_ctx_pub = sig
       val get : t -> Type_env.t
     end
 
-    module Renamer : sig
-      val get : t -> Renamer.t
+    module Ident_renamer : sig
+      val get : t -> Ident.t Renamer.t
     end
   end
   with type t = Analyser_ctx.t

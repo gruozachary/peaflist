@@ -1,11 +1,11 @@
 open! Base
 
-type t
-type heart
+type 'mono t
+type 'mono heart
 
-val fresh_heart : unit -> heart
-val empty : heart -> t
-val declare : t -> heart:heart -> str:string -> t
-val fetch : t -> str:string -> Ident.t Option.t
-val declare_and_fetch : t -> heart:heart -> str:string -> Ident.t * t
-val merge : t -> t -> t
+val fresh_heart : (module Monotonic.S with type t = 'mono) -> 'mono heart
+val empty : 'mono heart -> 'mono t
+val declare : 'mono t -> heart:'mono heart -> str:string -> 'mono t
+val fetch : 'mono t -> str:string -> 'mono Option.t
+val declare_and_fetch : 'mono t -> heart:'mono heart -> str:string -> 'mono * 'mono t
+val merge : 'mono t -> 'mono t -> 'mono t
