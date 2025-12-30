@@ -16,7 +16,7 @@ module type Type_env_pub = sig
     type t
     type arity = int
 
-    val lookup : t -> id:string -> arity Option.t
+    val lookup : t -> id:Type_ident.t -> arity Option.t
   end
   with type t = Type_env.t
 
@@ -25,6 +25,11 @@ module type Analyser_ctx_pub = sig
 
     val empty : unit -> t
     val fetch_and_lookup : t -> ident_str:string -> (Ident.t * Scheme.t) option
+
+    val type_fetch_and_lookup
+      :  t
+      -> ident_str:string
+      -> (Type_ident.t * Type_env.arity) option
 
     module Env : sig
       val get : t -> Term_env.t

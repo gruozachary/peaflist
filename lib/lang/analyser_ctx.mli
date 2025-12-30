@@ -4,6 +4,17 @@ val empty : unit -> t
 val fetch_and_lookup : t -> ident_str:string -> (Ident.t * Scheme.t) option
 val declare_and_introduce : t -> ident_str:string -> scheme:Scheme.t -> Ident.t * t
 
+val type_fetch_and_lookup
+  :  t
+  -> ident_str:string
+  -> (Type_ident.t * Type_env.arity) option
+
+val type_declare_and_introduce
+  :  t
+  -> ident_str:string
+  -> arity:Type_env.arity
+  -> (Type_ident.t * t) Option.t
+
 module Env : sig
   val get : t -> Term_env.t
   val map : t -> f:(Term_env.t -> Term_env.t) -> t
