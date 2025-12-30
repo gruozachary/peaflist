@@ -26,7 +26,7 @@ end
 module Decl : sig
   type t =
     | ValDecl of Ident.t * Expr.t
-    | TypeDecl of string
+    | TypeDecl of Type_ident.t
 
   val zonk : Subst.t -> t -> t
   val sexp_of_t : t -> Sexp.t

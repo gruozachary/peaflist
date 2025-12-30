@@ -4,6 +4,14 @@ type id = string [@@deriving eq]
 type ty_id = string [@@deriving eq]
 type ty_var = string [@@deriving eq]
 
+let fetch_type_ident_exn ctx ~ident_str =
+  Analyser_ctx.Type_ident_renamer.get ctx
+  |> Renamer.fetch ~str:ident_str
+  |> Option.value_exn
+;;
+
+let make_prim_tcon ctx str = Type.TCon (fetch_type_ident_exn ctx ~ident_str:str, [])
+
 let instantiate ctx = function
   | Scheme.Forall (qs, ty) ->
     let sub =
@@ -45,7 +53,7 @@ module Pat = struct
     match p with
     | CtorApp (ident_str, po) ->
       let%bind ident =
-        Analyser_ctx.Renamer.get ctx
+        Analyser_ctx.Ident_renamer.get ctx
         |> Renamer.fetch ~str:ident_str
         |> Result.of_option ~error:"Constructor name unrecognised"
       in
@@ -71,17 +79,18 @@ module Pat = struct
          Result.Ok
            ( Subst.empty
            , Term_env.empty ()
-           , Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
+           , Renamer.empty
+               (Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
            , t
            , Core.Pat.CtorApp (ident, Option.None, t) )
        | _ -> Result.Error "Constructor arity mismatch in pattern")
     | Ident ident_str ->
       let t = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let ident, r =
-        Analyser_ctx.Renamer.get ctx
+        Analyser_ctx.Ident_renamer.get ctx
         |> Renamer.declare_and_fetch
              ~str:ident_str
-             ~heart:(Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
+             ~heart:(Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
       in
       Result.Ok
         ( Subst.empty
@@ -93,8 +102,8 @@ module Pat = struct
       Result.Ok
         ( Subst.empty
         , Term_env.empty ()
-        , Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
-        , Type.TCon ("int", [])
+        , Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
+        , make_prim_tcon ctx "int"
         , Core.Pat.Int x )
     | Tuple ps ->
       let%map s, g, r, ts, p_cs =
@@ -103,7 +112,8 @@ module Pat = struct
             (Result.Ok
                ( Subst.empty
                , Term_env.empty ()
-               , Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.renamer_heart)
+               , Renamer.empty
+                   (Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
                , []
                , [] ))
           ~f:(fun sgo p ->
@@ -198,7 +208,7 @@ module Expr = struct
       let%map s', ty', e_c' = infer ctx e' in
       Subst.compose s s', ty', Core.Expr.Let (ident, scheme, e_c, e_c')
     | Group e -> infer ctx e
-    | Int x -> Result.Ok (Subst.empty, Type.TCon ("int", []), Core.Expr.Int x)
+    | Int x -> Result.Ok (Subst.empty, make_prim_tcon ctx "int", Core.Expr.Int x)
     | BinOp (el, o, er) ->
       let open Bin_op in
       (match o with
@@ -206,19 +216,16 @@ module Expr = struct
          let%bind s, ty, el_c = infer ctx el in
          let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
          let%bind s1, ty', er_c = infer ctx er in
-         let%bind s2 =
-           Subst.unify (Subst.apply_type ~sub:s1 ty) (Type.TCon ("int", []))
-         in
-         let%map s3 =
-           Subst.unify (Subst.apply_type ~sub:s2 ty') (Type.TCon ("int", []))
-         in
+         let int_tcon = make_prim_tcon ctx "int" in
+         let%bind s2 = Subst.unify (Subst.apply_type ~sub:s1 ty) int_tcon in
+         let%map s3 = Subst.unify (Subst.apply_type ~sub:s2 ty') int_tcon in
          let s' = Subst.compose (Subst.compose (Subst.compose s s1) s2) s3 in
          ( s'
-         , Type.TCon ("int", [])
+         , int_tcon
          , Core.Expr.Apply
              ( Core.Expr.Apply
                  ( Core.Expr.Id
-                     ( Analyser_ctx.Renamer.get ctx
+                     ( Analyser_ctx.Ident_renamer.get ctx
                        |> Renamer.fetch
                             ~str:
                               (match o with
@@ -227,13 +234,11 @@ module Expr = struct
                                | Plus -> "+"
                                | Sub -> "-")
                        |> Option.value_exn
-                     , Type.TFun
-                         ( Type.TCon ("int", [])
-                         , Type.TFun (Type.TCon ("int", []), Type.TCon ("int", [])) ) )
+                     , Type.TFun (int_tcon, Type.TFun (int_tcon, int_tcon)) )
                  , el_c
-                 , Type.TFun (Type.TCon ("int", []), Type.TCon ("int", [])) )
+                 , Type.TFun (int_tcon, int_tcon) )
              , er_c
-             , Type.TCon ("int", []) ) ))
+             , int_tcon ) ))
     | Match (o, arms) ->
       let%bind s_opr, t_opr, e_opr_c = infer ctx o in
       let%bind s, ts, arms_c =
@@ -249,7 +254,7 @@ module Expr = struct
             in
             let s = Subst.compose s s_uni in
             let ctx =
-              Analyser_ctx.Renamer.map ctx ~f:(fun x -> Renamer.merge r x)
+              Analyser_ctx.Ident_renamer.map ctx ~f:(fun x -> Renamer.merge r x)
               |> Analyser_ctx.Env.map
                    ~f:
                      (Term_env.merge g ~f:(fun ~key:_ m ->
@@ -306,22 +311,23 @@ module Ty = struct
     | Fun of t * t
   [@@deriving eq]
 
-  let rec to_type ~vm t =
+  let rec to_type ~renamer ~vm t =
     let open Option.Let_syntax in
     match t with
     | Var x ->
       let%map tv = Map.find vm x in
       Type.TVar tv
     | Fun (t, t') ->
-      let%bind ty_l = to_type ~vm t in
-      let%map ty_r = to_type ~vm t' in
+      let%bind ty_l = to_type ~renamer ~vm t in
+      let%map ty_r = to_type ~renamer ~vm t' in
       Type.TFun (ty_l, ty_r)
     | Prod ts ->
-      let%map tys = Option.all (List.map ~f:(to_type ~vm) ts) in
+      let%map tys = Option.all (List.map ~f:(to_type ~renamer ~vm) ts) in
       Type.TProd tys
-    | Con (x, ts) ->
-      let%map tys = Option.all (List.map ~f:(to_type ~vm) ts) in
-      Type.TCon (x, tys)
+    | Con (ident_str, ts) ->
+      let%bind tys = Option.all (List.map ~f:(to_type ~renamer ~vm) ts) in
+      let%map ident = Renamer.fetch renamer ~str:ident_str in
+      Type.TCon (ident, tys)
   ;;
 end
 
@@ -353,7 +359,10 @@ module Decl = struct
         | `Ok x -> Result.Ok x
         | `Duplicate_key _ -> Result.Error "Duplicate type variable"
       in
-      let ctx = Analyser_ctx.Tenv.map ctx ~f:(Type_env.introduce ~id:x ~arity) in
+      let%bind ident, ctx =
+        Analyser_ctx.type_declare_and_introduce ctx ~ident_str:x ~arity
+        |> Result.of_option ~error:"Type definition with that name already exists"
+      in
       let%map ctx =
         List.fold ctors ~init:(Result.Ok ctx) ~f:(fun ctx_opt (ident_str, t_opt) ->
           let%bind ctx = ctx_opt in
@@ -363,15 +372,21 @@ module Decl = struct
           let scheme =
             match t_opt with
             | Option.Some t ->
-              (match Ty.to_type ~vm:tv_map t with
-               | Option.Some ty -> Scheme.Forall (tvs, Type.TFun (ty, Type.TCon (x, tyvs)))
+              (match
+                 Ty.to_type
+                   ~renamer:(Analyser_ctx.Type_ident_renamer.get ctx)
+                   ~vm:tv_map
+                   t
+               with
+               | Option.Some ty ->
+                 Scheme.Forall (tvs, Type.TFun (ty, Type.TCon (ident, tyvs)))
                | Option.None -> assert false)
-            | Option.None -> Scheme.Forall (tvs, Type.TCon (x, tyvs))
+            | Option.None -> Scheme.Forall (tvs, Type.TCon (ident, tyvs))
           in
           let _, ctx = Analyser_ctx.declare_and_introduce ctx ~ident_str ~scheme in
           ctx)
       in
-      ctx, Core.Decl.TypeDecl x
+      ctx, Core.Decl.TypeDecl ident
   ;;
 end
 

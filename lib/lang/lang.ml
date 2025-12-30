@@ -6,17 +6,17 @@ module type Term_env_pub = sig
   with type t = Term_env.t
 
 module type Renamer_pub = sig
-    type t
+    type 'mono t
 
-    val fetch : t -> str:string -> Ident.t Option.t
+    val fetch : 'mono t -> str:string -> 'mono Option.t
   end
-  with type t = Renamer.t
+  with type 'mono t = 'mono Renamer.t
 
 module type Type_env_pub = sig
     type t
     type arity = int
 
-    val lookup : t -> id:string -> arity Option.t
+    val lookup : t -> id:Type_ident.t -> arity Option.t
   end
   with type t = Type_env.t
 
@@ -26,6 +26,11 @@ module type Analyser_ctx_pub = sig
     val empty : unit -> t
     val fetch_and_lookup : t -> ident_str:string -> (Ident.t * Scheme.t) option
 
+    val type_fetch_and_lookup
+      :  t
+      -> ident_str:string
+      -> (Type_ident.t * Type_env.arity) option
+
     module Env : sig
       val get : t -> Term_env.t
     end
@@ -34,8 +39,8 @@ module type Analyser_ctx_pub = sig
       val get : t -> Type_env.t
     end
 
-    module Renamer : sig
-      val get : t -> Renamer.t
+    module Ident_renamer : sig
+      val get : t -> Ident.t Renamer.t
     end
   end
   with type t = Analyser_ctx.t

@@ -50,12 +50,12 @@ end
 module Decl = struct
   type t =
     | ValDecl of Ident.t * Expr.t
-    | TypeDecl of string
+    | TypeDecl of Type_ident.t
   [@@deriving sexp_of]
 
   let zonk sub = function
     | ValDecl (ident, e) -> ValDecl (ident, Expr.zonk sub e)
-    | TypeDecl str -> TypeDecl str
+    | TypeDecl ident -> TypeDecl ident
   ;;
 end
 

@@ -119,10 +119,9 @@ let handle_command toplevel_ctx cmd =
     let%map ty, _ = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
     Stdio.print_endline (Lang.Type.to_string ty);
     false
-  | Line.CommandKind.TypeInfo x ->
-    let%map arity =
-      Lang.Analyser_ctx.Tenv.get toplevel_ctx.semantic_ctx
-      |> Lang.Type_env.lookup ~id:x
+  | Line.CommandKind.TypeInfo ident_str ->
+    let%map _, arity =
+      Lang.Analyser_ctx.type_fetch_and_lookup toplevel_ctx.semantic_ctx ~ident_str
       |> of_option ~error:"Unbound type identifier"
     in
     Stdio.print_endline ("Arity: " ^ Int.to_string arity);

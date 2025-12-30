@@ -4,7 +4,7 @@ type t =
   | TVar of Type_var.t
   | TFun of t * t
   | TProd of t list
-  | TCon of string * t list
+  | TCon of Type_ident.t * t list
 
 val to_string : t -> string
 val sexp_of_t : t -> Sexp.t

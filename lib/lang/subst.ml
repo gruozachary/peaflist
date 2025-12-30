@@ -68,7 +68,7 @@ let rec unify ty0 ty1 =
      | List.Or_unequal_lengths.Unequal_lengths ->
        Result.Error "Tuple arity must be the same")
   (*TODO: abstract*)
-  | Type.TCon (x, tys), Type.TCon (x', tys') when String.equal x x' ->
+  | Type.TCon (ident, tys), Type.TCon (ident', tys') when Type_ident.equal ident ident' ->
     unify (Type.TProd tys) (Type.TProd tys')
   | _ -> Result.Error "Type unification failed"
 ;;
