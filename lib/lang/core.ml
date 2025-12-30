@@ -6,6 +6,7 @@ module Pat = struct
     | Ident of Ident.t * Type.t
     | Tuple of t list * Type.t
     | CtorApp of Ident.t * t Option.t * Type.t
+  [@@deriving sexp_of]
 
   let rec zonk sub = function
     | Int x -> Int x
@@ -26,6 +27,7 @@ module Expr = struct
     | Let of Ident.t * Scheme.t * t * t
     | Match of t * (Pat.t * t) list * Type.t
     | Tuple of t list * Type.t
+  [@@deriving sexp_of]
 
   let rec zonk sub = function
     | Int x -> Int x
@@ -49,6 +51,7 @@ module Decl = struct
   type t =
     | ValDecl of Ident.t * Expr.t
     | TypeDecl of string
+  [@@deriving sexp_of]
 
   let zonk sub = function
     | ValDecl (ident, e) -> ValDecl (ident, Expr.zonk sub e)
@@ -57,7 +60,7 @@ module Decl = struct
 end
 
 module Prog = struct
-  type t = Decl.t list
+  type t = Decl.t list [@@deriving sexp_of]
 
   let zonk sub = List.map ~f:(Decl.zonk sub)
 end

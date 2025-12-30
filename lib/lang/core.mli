@@ -20,6 +20,7 @@ module Expr : sig
     | Tuple of t list * Type.t
 
   val zonk : Subst.t -> t -> t
+  val sexp_of_t : t -> Sexp.t
 end
 
 module Decl : sig
@@ -28,10 +29,12 @@ module Decl : sig
     | TypeDecl of string
 
   val zonk : Subst.t -> t -> t
+  val sexp_of_t : t -> Sexp.t
 end
 
 module Prog : sig
   type t = Decl.t list
 
   val zonk : Subst.t -> t -> t
+  val sexp_of_t : t -> Sexp.t
 end

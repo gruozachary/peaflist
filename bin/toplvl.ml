@@ -140,7 +140,8 @@ let run toplevel_ctx =
   in
   match%bind Line.parse line |> of_option ~error:"Parse of input failed." with
   | Line.Expr e ->
-    let%map _ = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
+    let%map _, core = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
+    Stdio.print_endline (Lang.Core.Expr.sexp_of_t core |> Sexp.to_string_hum);
     false
   | Line.Decl d ->
     let%map ctx, _ = Lang.Raw.Decl.typecheck toplevel_ctx.semantic_ctx d in
