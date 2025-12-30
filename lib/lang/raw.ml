@@ -176,12 +176,7 @@ module Expr = struct
          let ty = instantiate ctx sc in
          Result.Ok (Subst.empty, ty, Core.Expr.Id (ident, ty))
        | Option.None -> Result.Error "Unbound variable")
-    | Constr ident_str ->
-      (match Analyser_ctx.fetch_and_lookup ctx ~ident_str with
-       | Option.Some (ident, sc) ->
-         let ty = instantiate ctx sc in
-         Result.Ok (Subst.empty, ty, Core.Expr.Constr (ident, ty))
-       | Option.None -> Result.Error "Unbound constructor")
+    | Constr _ -> Result.Error "Unexpected constructor"
     | Lambda (ident_str, e) ->
       let ty = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let ident, ctx =
@@ -192,14 +187,35 @@ module Expr = struct
       , Type.TFun (Subst.apply_type ~sub:s ty, Subst.apply_type ~sub:s ty')
       , Core.Expr.Lambda (ident, ty, e_c) )
     | Apply (ef, e) ->
-      let%bind s, tyf, ef_c = infer ctx ef in
-      let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
-      let%bind s', ty, e_c = infer ctx e in
-      let tyv = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
-      let%map s'' = Subst.unify (Subst.apply_type ~sub:s' tyf) (Type.TFun (ty, tyv)) in
-      ( Subst.compose (Subst.compose s s') s''
-      , Subst.apply_type ~sub:s'' tyv
-      , Core.Expr.Apply (ef_c, e_c, tyv) )
+      (match ef with
+       | Constr ident_str ->
+         (*TODO: you can do this while parsing*)
+         (match Analyser_ctx.fetch_and_lookup ctx ~ident_str with
+          | Option.Some (ident, sc) ->
+            let ty_constr = instantiate ctx sc in
+            let%bind s, ty_arg, e_args_c = infer ctx e in
+            let ty_res = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
+            let%map s' =
+              Subst.unify (Subst.apply_type ~sub:s ty_constr) (Type.TFun (ty_arg, ty_res))
+            in
+            ( Subst.compose s s'
+            , Subst.apply_type ~sub:s' ty_res
+            , Core.Expr.Constr
+                ( ident
+                , (match e_args_c with
+                   | Tuple (es, _) -> es
+                   | _ -> [ e_args_c ])
+                , ty_res ) )
+          | Option.None -> Result.Error "Unbound constructor")
+       | _ ->
+         let%bind s, tyf, ef_c = infer ctx ef in
+         let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
+         let%bind s', ty, e_c = infer ctx e in
+         let tyv = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
+         let%map s'' = Subst.unify (Subst.apply_type ~sub:s' tyf) (Type.TFun (ty, tyv)) in
+         ( Subst.compose (Subst.compose s s') s''
+         , Subst.apply_type ~sub:s'' tyv
+         , Core.Expr.Apply (ef_c, e_c, tyv) ))
     | Binding (ident_str, e, e') ->
       let%bind s, ty, e_c = infer ctx e in
       let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
