@@ -8,16 +8,6 @@ type t =
   ; type_ident_renamer : Type_ident.t Renamer.t
   }
 
-let empty () =
-  let state = Analyser_state.create () in
-  { env = Term_env.empty ()
-  ; state
-  ; tenv = Type_env.empty
-  ; ident_renamer = Renamer.empty (Analyser_state.ident_renamer_heart state)
-  ; type_ident_renamer = Renamer.empty (Analyser_state.type_ident_renamer_heart state)
-  }
-;;
-
 let fetch_and_lookup ctx ~ident_str =
   let open Option.Let_syntax in
   let%bind ident = Renamer.fetch ctx.ident_renamer ~str:ident_str in
@@ -84,3 +74,27 @@ module Type_ident_renamer = struct
   let get ctx = ctx.type_ident_renamer
   let map ctx ~f = { ctx with type_ident_renamer = f ctx.type_ident_renamer }
 end
+
+let empty () =
+  let state = Analyser_state.create () in
+  let ctx =
+    { env = Term_env.empty ()
+    ; state
+    ; tenv = Type_env.empty
+    ; ident_renamer = Renamer.empty (Analyser_state.ident_renamer_heart state)
+    ; type_ident_renamer = Renamer.empty (Analyser_state.type_ident_renamer_heart state)
+    }
+  in
+  let int_ident, ctx =
+    type_declare_and_introduce ctx ~ident_str:"int" ~arity:0 |> Option.value_exn
+  in
+  let int_tcon = Type.TCon (int_ident, []) in
+  let int_bin_op_scheme =
+    Type.TFun (int_tcon, Type.TFun (int_tcon, int_tcon)) |> Scheme.of_type
+  in
+  let _, ctx = declare_and_introduce ctx ~ident_str:"+" ~scheme:int_bin_op_scheme in
+  let _, ctx = declare_and_introduce ctx ~ident_str:"-" ~scheme:int_bin_op_scheme in
+  let _, ctx = declare_and_introduce ctx ~ident_str:"*" ~scheme:int_bin_op_scheme in
+  let _, ctx = declare_and_introduce ctx ~ident_str:"/" ~scheme:int_bin_op_scheme in
+  ctx
+;;
