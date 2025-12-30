@@ -116,7 +116,7 @@ let handle_command toplevel_ctx cmd =
     Stdio.print_endline (Lang.Scheme.to_string scheme);
     false
   | Line.CommandKind.TypeOf (Either.Second e) ->
-    let%map ty = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
+    let%map ty, _ = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
     Stdio.print_endline (Lang.Type.to_string ty);
     false
   | Line.CommandKind.TypeInfo x ->

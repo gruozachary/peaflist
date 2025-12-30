@@ -39,7 +39,7 @@ module Expr : sig
     | Tuple of t list
     | BinOp of t * Bin_op.t * t
 
-  val typecheck : Analyser_ctx.t -> t -> (Type.t, string) Result.t
+  val typecheck : Analyser_ctx.t -> t -> (Type.t * Core.Expr.t, string) Result.t
   val equal : t -> t -> bool
 end
 

@@ -293,7 +293,9 @@ module Expr = struct
       s, t, Core.Expr.Tuple (List.rev es_c, t)
   ;;
 
-  let typecheck ctx e = infer ctx e |> Result.map ~f:(fun (_, t, _) -> t)
+  let typecheck ctx e =
+    infer ctx e |> Result.map ~f:(fun (sub, t, core) -> t, Core.Expr.zonk sub core)
+  ;;
 end
 
 module Ty = struct
