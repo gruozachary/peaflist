@@ -18,14 +18,20 @@ module Expr : sig
     | Let of Ident.t * Scheme.t * t * t
     | Match of t * (Pat.t * t) list * Type.t
     | Tuple of t list * Type.t
+
+  val zonk : Subst.t -> t -> t
 end
 
 module Decl : sig
   type t =
     | ValDecl of Ident.t * Expr.t
     | TypeDecl of string
+
+  val zonk : Subst.t -> t -> t
 end
 
 module Prog : sig
   type t = Decl.t list
+
+  val zonk : Subst.t -> t -> t
 end
