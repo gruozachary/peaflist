@@ -6,6 +6,7 @@ type t =
   ; state : Analyser_state.t
   ; ident_renamer : Ident.t Renamer.t
   ; type_ident_renamer : Type_ident.t Renamer.t
+  ; constr_ident_renamer : Constr_ident.t Renamer.t
   }
 
 let fetch_and_lookup ctx ~ident_str =
@@ -75,6 +76,11 @@ module Type_ident_renamer = struct
   let map ctx ~f = { ctx with type_ident_renamer = f ctx.type_ident_renamer }
 end
 
+module Constr_ident_renamer = struct
+  let get ctx = ctx.constr_ident_renamer
+  let map ctx ~f = { ctx with constr_ident_renamer = f ctx.constr_ident_renamer }
+end
+
 let empty () =
   let state = Analyser_state.create () in
   let ctx =
@@ -83,6 +89,8 @@ let empty () =
     ; tenv = Type_env.empty
     ; ident_renamer = Renamer.empty (Analyser_state.ident_renamer_heart state)
     ; type_ident_renamer = Renamer.empty (Analyser_state.type_ident_renamer_heart state)
+    ; constr_ident_renamer =
+        Renamer.empty (Analyser_state.constr_ident_renamer_heart state)
     }
   in
   let int_ident, ctx =

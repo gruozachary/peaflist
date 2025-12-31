@@ -38,3 +38,8 @@ module Type_ident_renamer : sig
   val get : t -> Type_ident.t Renamer.t
   val map : t -> f:(Type_ident.t Renamer.t -> Type_ident.t Renamer.t) -> t
 end
+
+module Constr_ident_renamer : sig
+  val get : t -> Constr_ident.t Renamer.t
+  val map : t -> f:(Constr_ident.t Renamer.t -> Constr_ident.t Renamer.t) -> t
+end
