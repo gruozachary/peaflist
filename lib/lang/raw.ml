@@ -190,9 +190,9 @@ module Expr = struct
       (match ef with
        | Constr ident_str ->
          (*TODO: you can do this while parsing*)
-         (match Analyser_ctx.fetch_and_lookup ctx ~ident_str with
-          | Option.Some (ident, sc) ->
-            let ty_constr = instantiate ctx sc in
+         (match Analyser_ctx.constr_fetch_and_lookup ctx ~ident_str with
+          | Option.Some (ident, entry) ->
+            let ty_constr = instantiate ctx entry.scheme in
             let%bind s, ty_arg, e_args_c = infer ctx e in
             let ty_res = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
             let%map s' =

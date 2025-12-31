@@ -21,7 +21,7 @@ module Expr = struct
   type t =
     | Int of int
     | Id of Ident.t * Type.t
-    | Constr of Ident.t * t List.t * Type.t
+    | Constr of Constr_ident.t * t List.t * Type.t
     | Apply of t * t * Type.t
     | Lambda of Ident.t * Type.t * t
     | Let of Ident.t * Scheme.t * t * t
