@@ -14,9 +14,13 @@ module type Renamer_pub = sig
 
 module type Type_env_pub = sig
     type t
-    type arity = int
 
-    val lookup : t -> id:Type_ident.t -> arity Option.t
+    type entry =
+      { arity : int
+      ; constrs : Constr_ident.t List.t
+      }
+
+    val lookup : t -> id:Type_ident.t -> entry Option.t
   end
   with type t = Type_env.t
 
@@ -29,7 +33,7 @@ module type Analyser_ctx_pub = sig
     val type_fetch_and_lookup
       :  t
       -> ident_str:string
-      -> (Type_ident.t * Type_env.arity) option
+      -> (Type_ident.t * Type_env.entry) option
 
     module Env : sig
       val get : t -> Term_env.t

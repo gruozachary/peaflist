@@ -7,12 +7,12 @@ val declare_and_introduce : t -> ident_str:string -> scheme:Scheme.t -> Ident.t 
 val type_fetch_and_lookup
   :  t
   -> ident_str:string
-  -> (Type_ident.t * Type_env.arity) option
+  -> (Type_ident.t * Type_env.entry) option
 
 val type_declare_and_introduce
   :  t
   -> ident_str:string
-  -> arity:Type_env.arity
+  -> entry:Type_env.entry
   -> (Type_ident.t * t) Option.t
 
 val constr_fetch_and_lookup

@@ -36,7 +36,7 @@ let type_fetch_and_lookup ctx ~ident_str =
   ident, arity
 ;;
 
-let type_declare_and_introduce ctx ~ident_str ~arity =
+let type_declare_and_introduce ctx ~ident_str ~entry =
   let open Option.Let_syntax in
   let%map () =
     match Renamer.fetch ctx.type_ident_renamer ~str:ident_str with
@@ -49,7 +49,7 @@ let type_declare_and_introduce ctx ~ident_str ~arity =
       ~heart:(Analyser_state.type_ident_renamer_heart ctx.state)
       ~str:ident_str
   in
-  let tenv = Type_env.introduce ctx.tenv ~id:ident ~arity in
+  let tenv = Type_env.introduce ctx.tenv ~id:ident ~data:entry in
   ident, { ctx with type_ident_renamer = r; tenv }
 ;;
 
@@ -123,7 +123,8 @@ let empty () =
     }
   in
   let int_ident, ctx =
-    type_declare_and_introduce ctx ~ident_str:"int" ~arity:0 |> Option.value_exn
+    type_declare_and_introduce ctx ~ident_str:"int" ~entry:{ arity = 0; constrs = [] }
+    |> Option.value_exn
   in
   let int_tcon = Type.TCon (int_ident, []) in
   let int_bin_op_scheme =
