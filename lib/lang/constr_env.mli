@@ -3,6 +3,7 @@ type t
 type entry =
   { parent : Type_ident.t
   ; tag : int
+  ; scheme : Scheme.t
   }
 
 val empty : t
