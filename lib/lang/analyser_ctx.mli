@@ -15,6 +15,17 @@ val type_declare_and_introduce
   -> arity:Type_env.arity
   -> (Type_ident.t * t) Option.t
 
+val constr_fetch_and_lookup
+  :  t
+  -> ident_str:string
+  -> (Constr_ident.t * Constr_env.entry) option
+
+val constr_declare_and_introduce
+  :  t
+  -> ident_str:string
+  -> entry:Constr_env.entry
+  -> Constr_ident.t * t
+
 module Env : sig
   val get : t -> Term_env.t
   val map : t -> f:(Term_env.t -> Term_env.t) -> t

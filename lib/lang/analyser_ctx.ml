@@ -53,6 +53,28 @@ let type_declare_and_introduce ctx ~ident_str ~arity =
   ident, { ctx with type_ident_renamer = r; tenv }
 ;;
 
+(* TODO: Consider an abstraction*)
+let constr_fetch_and_lookup ctx ~ident_str =
+  let open Option.Let_syntax in
+  let%bind ident = Renamer.fetch ctx.constr_ident_renamer ~str:ident_str in
+  let%map entry = Constr_env.lookup ctx.cenv ~ident in
+  ident, entry
+;;
+
+let constr_declare_and_introduce ctx ~ident_str ~entry =
+  let ident, r =
+    Renamer.declare_and_fetch
+      ctx.constr_ident_renamer
+      ~heart:(Analyser_state.constr_ident_renamer_heart ctx.state)
+      ~str:ident_str
+  in
+  ( ident
+  , { ctx with
+      constr_ident_renamer = r
+    ; cenv = Constr_env.introduce ctx.cenv ~ident ~data:entry
+    } )
+;;
+
 module Env = struct
   let get ctx = ctx.env
   let map ctx ~f = { ctx with env = f ctx.env }
