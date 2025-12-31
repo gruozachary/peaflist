@@ -375,16 +375,21 @@ module Decl = struct
         | `Ok x -> Result.Ok x
         | `Duplicate_key _ -> Result.Error "Duplicate type variable"
       in
-      let%bind ident_parent, ctx =
-        Analyser_ctx.type_declare_and_introduce ctx ~ident_str:x ~arity
-        |> Result.of_option ~error:"Type definition with that name already exists"
+      let ident_parent, type_ident_renamer =
+        Analyser_ctx.Type_ident_renamer.get ctx
+        |> Renamer.declare_and_fetch
+             ~heart:(Analyser_ctx.State.get ctx |> Analyser_state.type_ident_renamer_heart)
+             ~str:x
       in
-      let%map ctx, _ =
+      let ctx =
+        Analyser_ctx.Type_ident_renamer.map ctx ~f:(fun _ -> type_ident_renamer)
+      in
+      let%map ctx, constrs, _ =
         List.fold
           ctors
-          ~init:(Result.Ok (ctx, 0))
+          ~init:(Result.Ok (ctx, [], 0))
           ~f:(fun ctx_opt (ident_str, t_opt) ->
-            let%bind ctx, tag = ctx_opt in
+            let%bind ctx, constrs, tag = ctx_opt in
             let%map tv_map = get_tvs () in
             let tvs = Map.data tv_map in
             let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
@@ -402,13 +407,18 @@ module Decl = struct
                  | Option.None -> assert false)
               | Option.None -> Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs))
             in
-            let _, ctx =
+            let ident_constr, ctx =
               Analyser_ctx.constr_declare_and_introduce
                 ctx
                 ~ident_str
                 ~entry:{ parent = ident_parent; tag; scheme }
             in
-            ctx, tag + 1)
+            ctx, ident_constr :: constrs, tag + 1)
+      in
+      let ctx =
+        Analyser_ctx.Tenv.map
+          ctx
+          ~f:(Type_env.introduce ~id:ident_parent ~data:{ arity; constrs })
       in
       ctx, Core.Decl.TypeDecl ident_parent
   ;;
