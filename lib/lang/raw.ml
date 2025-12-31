@@ -375,34 +375,42 @@ module Decl = struct
         | `Ok x -> Result.Ok x
         | `Duplicate_key _ -> Result.Error "Duplicate type variable"
       in
-      let%bind ident, ctx =
+      let%bind ident_parent, ctx =
         Analyser_ctx.type_declare_and_introduce ctx ~ident_str:x ~arity
         |> Result.of_option ~error:"Type definition with that name already exists"
       in
-      let%map ctx =
-        List.fold ctors ~init:(Result.Ok ctx) ~f:(fun ctx_opt (ident_str, t_opt) ->
-          let%bind ctx = ctx_opt in
-          let%map tv_map = get_tvs () in
-          let tvs = Map.data tv_map in
-          let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
-          let scheme =
-            match t_opt with
-            | Option.Some t ->
-              (match
-                 Ty.to_type
-                   ~renamer:(Analyser_ctx.Type_ident_renamer.get ctx)
-                   ~vm:tv_map
-                   t
-               with
-               | Option.Some ty ->
-                 Scheme.Forall (tvs, Type.TFun (ty, Type.TCon (ident, tyvs)))
-               | Option.None -> assert false)
-            | Option.None -> Scheme.Forall (tvs, Type.TCon (ident, tyvs))
-          in
-          let _, ctx = Analyser_ctx.declare_and_introduce ctx ~ident_str ~scheme in
-          ctx)
+      let%map ctx, _ =
+        List.fold
+          ctors
+          ~init:(Result.Ok (ctx, 0))
+          ~f:(fun ctx_opt (ident_str, t_opt) ->
+            let%bind ctx, tag = ctx_opt in
+            let%map tv_map = get_tvs () in
+            let tvs = Map.data tv_map in
+            let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
+            let scheme =
+              match t_opt with
+              | Option.Some t ->
+                (match
+                   Ty.to_type
+                     ~renamer:(Analyser_ctx.Type_ident_renamer.get ctx)
+                     ~vm:tv_map
+                     t
+                 with
+                 | Option.Some ty ->
+                   Scheme.Forall (tvs, Type.TFun (ty, Type.TCon (ident_parent, tyvs)))
+                 | Option.None -> assert false)
+              | Option.None -> Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs))
+            in
+            let _, ctx =
+              Analyser_ctx.constr_declare_and_introduce
+                ctx
+                ~ident_str
+                ~entry:{ parent = ident_parent; tag; scheme }
+            in
+            ctx, tag + 1)
       in
-      ctx, Core.Decl.TypeDecl ident
+      ctx, Core.Decl.TypeDecl ident_parent
   ;;
 end
 
