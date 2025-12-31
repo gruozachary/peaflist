@@ -3,6 +3,7 @@ open! Base
 type t =
   { env : Term_env.t
   ; tenv : Type_env.t
+  ; cenv : Constr_env.t
   ; state : Analyser_state.t
   ; ident_renamer : Ident.t Renamer.t
   ; type_ident_renamer : Type_ident.t Renamer.t
@@ -62,6 +63,11 @@ module Tenv = struct
   let map ctx ~f = { ctx with tenv = f ctx.tenv }
 end
 
+module C_env = struct
+  let get ctx = ctx.cenv
+  let map ctx ~f = { ctx with cenv = f ctx.cenv }
+end
+
 module State = struct
   let get ctx = ctx.state
 end
@@ -87,6 +93,7 @@ let empty () =
     { env = Term_env.empty ()
     ; state
     ; tenv = Type_env.empty
+    ; cenv = Constr_env.empty
     ; ident_renamer = Renamer.empty (Analyser_state.ident_renamer_heart state)
     ; type_ident_renamer = Renamer.empty (Analyser_state.type_ident_renamer_heart state)
     ; constr_ident_renamer =

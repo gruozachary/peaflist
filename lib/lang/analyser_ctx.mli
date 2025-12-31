@@ -25,6 +25,11 @@ module Tenv : sig
   val map : t -> f:(Type_env.t -> Type_env.t) -> t
 end
 
+module C_env : sig
+  val get : t -> Constr_env.t
+  val map : t -> f:(Constr_env.t -> Constr_env.t) -> t
+end
+
 module State : sig
   val get : t -> Analyser_state.t
 end
