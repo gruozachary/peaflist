@@ -12,6 +12,17 @@ let fetch_type_ident_exn ctx ~ident_str =
 
 let make_prim_tcon ctx str = Type.TCon (fetch_type_ident_exn ctx ~ident_str:str, [])
 
+let rec replace_type_vars m ty =
+  match ty with
+  | Type.TVar tv ->
+    (match Map.find m tv with
+     | Some tv' -> Type.TVar tv'
+     | None -> ty)
+  | Type.TFun (ty0, ty1) -> TFun (replace_type_vars m ty0, replace_type_vars m ty1)
+  | Type.TProd tys -> TProd (List.map tys ~f:(replace_type_vars m))
+  | Type.TCon (tvar, tys) -> TCon (tvar, List.map tys ~f:(replace_type_vars m))
+;;
+
 let instantiate ctx = function
   | Scheme.Forall (qs, ty) ->
     let sub =
@@ -21,17 +32,22 @@ let instantiate ctx = function
           Map.set acc ~key ~data:(Analyser_ctx.State.get ctx |> Analyser_state.fresh_tv))
         qs
     in
-    let rec replace sub ty =
-      match ty with
-      | Type.TVar tv ->
-        (match Map.find sub tv with
-         | Some tv' -> Type.TVar tv'
-         | None -> ty)
-      | Type.TFun (ty0, ty1) -> TFun (replace sub ty0, replace sub ty1)
-      | Type.TProd tys -> TProd (List.map tys ~f:(replace sub))
-      | Type.TCon (tvar, tys) -> TCon (tvar, List.map tys ~f:(replace sub))
-    in
-    replace sub ty
+    replace_type_vars sub ty
+;;
+
+let instantiate_two ctx (Scheme.Forall (qs_1, ty_1)) (Scheme.Forall (qs_2, ty_2)) =
+  let rec go m ~xs ~ys =
+    match xs, ys with
+    | [], [] -> m
+    | x :: xs, [] | [], x :: xs ->
+      Map.set m ~key:x ~data:(Analyser_ctx.State.get ctx |> Analyser_state.fresh_tv)
+      |> go ~xs ~ys:[]
+    | x :: xs, y :: ys ->
+      let tv = Analyser_ctx.State.get ctx |> Analyser_state.fresh_tv in
+      Map.set m ~key:x ~data:tv |> Map.set ~key:y ~data:tv |> go ~xs ~ys
+  in
+  let m = go (Map.empty (module Type_var)) ~xs:qs_1 ~ys:qs_2 in
+  replace_type_vars m ty_1, replace_type_vars m ty_2
 ;;
 
 let generalise ctx ty =
