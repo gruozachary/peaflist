@@ -24,6 +24,19 @@ module type Type_env_pub = sig
   end
   with type t = Type_env.t
 
+module type Constr_env_pub = sig
+  type t
+
+  type entry =
+    { parent : Type_ident.t
+    ; tag : int
+    ; arg_scheme_opt : Scheme.t Option.t
+    ; res_scheme : Scheme.t
+    }
+
+  val lookup : t -> ident:Constr_ident.t -> entry Option.t
+end
+
 module type Analyser_ctx_pub = sig
     type t
 
@@ -41,6 +54,10 @@ module type Analyser_ctx_pub = sig
 
     module Tenv : sig
       val get : t -> Type_env.t
+    end
+
+    module C_env : sig
+      val get : t -> Constr_env.t
     end
 
     module Ident_renamer : sig
@@ -66,6 +83,7 @@ module type Type_pub = sig
 module Raw = Raw
 module Core = Core
 module Term_env : Term_env_pub = Term_env
+module Constr_env : Constr_env_pub = Constr_env
 module Renamer : Renamer_pub = Renamer
 module Type_env : Type_env_pub = Type_env
 module Analyser_ctx : Analyser_ctx_pub = Analyser_ctx
