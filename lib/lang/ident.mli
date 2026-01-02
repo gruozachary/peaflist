@@ -10,7 +10,7 @@ module type S = sig
   include Comparable.S with type t := t
 end
 
-module type Make = functor
+module Make : functor
     (_ : sig
        val name : string
      end)
