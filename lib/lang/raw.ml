@@ -12,6 +12,17 @@ let fetch_type_ident_exn ctx ~ident_str =
 
 let make_prim_tcon ctx str = Type.TCon (fetch_type_ident_exn ctx ~ident_str:str, [])
 
+let rec replace_type_vars m ty =
+  match ty with
+  | Type.TVar tv ->
+    (match Map.find m tv with
+     | Some tv' -> Type.TVar tv'
+     | None -> ty)
+  | Type.TFun (ty0, ty1) -> TFun (replace_type_vars m ty0, replace_type_vars m ty1)
+  | Type.TProd tys -> TProd (List.map tys ~f:(replace_type_vars m))
+  | Type.TCon (tvar, tys) -> TCon (tvar, List.map tys ~f:(replace_type_vars m))
+;;
+
 let instantiate ctx = function
   | Scheme.Forall (qs, ty) ->
     let sub =
@@ -21,17 +32,22 @@ let instantiate ctx = function
           Map.set acc ~key ~data:(Analyser_ctx.State.get ctx |> Analyser_state.fresh_tv))
         qs
     in
-    let rec replace sub ty =
-      match ty with
-      | Type.TVar tv ->
-        (match Map.find sub tv with
-         | Some tv' -> Type.TVar tv'
-         | None -> ty)
-      | Type.TFun (ty0, ty1) -> TFun (replace sub ty0, replace sub ty1)
-      | Type.TProd tys -> TProd (List.map tys ~f:(replace sub))
-      | Type.TCon (tvar, tys) -> TCon (tvar, List.map tys ~f:(replace sub))
-    in
-    replace sub ty
+    replace_type_vars sub ty
+;;
+
+let instantiate_two ctx (Scheme.Forall (qs_1, ty_1)) (Scheme.Forall (qs_2, ty_2)) =
+  let rec go m ~xs ~ys =
+    match xs, ys with
+    | [], [] -> m
+    | x :: xs, [] | [], x :: xs ->
+      Map.set m ~key:x ~data:(Analyser_ctx.State.get ctx |> Analyser_state.fresh_tv)
+      |> go ~xs ~ys:[]
+    | x :: xs, y :: ys ->
+      let tv = Analyser_ctx.State.get ctx |> Analyser_state.fresh_tv in
+      Map.set m ~key:x ~data:tv |> Map.set ~key:y ~data:tv |> go ~xs ~ys
+  in
+  let m = go (Map.empty (module Type_var)) ~xs:qs_1 ~ys:qs_2 in
+  replace_type_vars m ty_1, replace_type_vars m ty_2
 ;;
 
 let generalise ctx ty =
@@ -157,7 +173,7 @@ module Expr = struct
   type t =
     | Int of int
     | Id of id
-    | Constr of id
+    | Constr of id * t list
     | Apply of t * t
     | Group of t
     | Lambda of id * t
@@ -176,12 +192,36 @@ module Expr = struct
          let ty = instantiate ctx sc in
          Result.Ok (Subst.empty, ty, Core.Expr.Id (ident, ty))
        | Option.None -> Result.Error "Unbound variable")
-    | Constr ident_str ->
-      (match Analyser_ctx.fetch_and_lookup ctx ~ident_str with
-       | Option.Some (ident, sc) ->
-         let ty = instantiate ctx sc in
-         Result.Ok (Subst.empty, ty, Core.Expr.Constr (ident, ty))
-       | Option.None -> Result.Error "Unbound constructor")
+    | Constr (ident_str, es) ->
+      let%bind ident, entry =
+        Analyser_ctx.constr_fetch_and_lookup ctx ~ident_str
+        |> Result.of_option ~error:"Unbound constructor"
+      in
+      let%map s, t, es_c =
+        match entry.arg_scheme_opt with
+        | Option.None ->
+          let ty_res = instantiate ctx entry.res_scheme in
+          return (Subst.empty, ty_res, [])
+        | Option.Some arg_scheme ->
+          let ty_param, ty_res = instantiate_two ctx arg_scheme entry.res_scheme in
+          let%map s, es_c =
+            match es with
+            | [ e ] ->
+              let%bind s_arg, ty_arg, e_c = infer ctx e in
+              let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
+              s, [ e_c ]
+            | es ->
+              let%bind s_arg, ty_arg, e_c = infer ctx (Tuple es) in
+              let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
+              ( s
+              , (match e_c with
+                 | Core.Expr.Tuple (es_c, _) -> es_c
+                 | _ -> raise_s [%message "Typecheck wasn't tuple"]) )
+          in
+          let t = Subst.apply_type ~sub:s ty_res in
+          s, t, es_c
+      in
+      s, t, Core.Expr.Constr (ident, es_c, t)
     | Lambda (ident_str, e) ->
       let ty = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let ident, ctx =
@@ -359,34 +399,54 @@ module Decl = struct
         | `Ok x -> Result.Ok x
         | `Duplicate_key _ -> Result.Error "Duplicate type variable"
       in
-      let%bind ident, ctx =
-        Analyser_ctx.type_declare_and_introduce ctx ~ident_str:x ~arity
-        |> Result.of_option ~error:"Type definition with that name already exists"
+      let ident_parent, type_ident_renamer =
+        Analyser_ctx.Type_ident_renamer.get ctx
+        |> Renamer.declare_and_fetch
+             ~heart:(Analyser_ctx.State.get ctx |> Analyser_state.type_ident_renamer_heart)
+             ~str:x
       in
-      let%map ctx =
-        List.fold ctors ~init:(Result.Ok ctx) ~f:(fun ctx_opt (ident_str, t_opt) ->
-          let%bind ctx = ctx_opt in
-          let%map tv_map = get_tvs () in
-          let tvs = Map.data tv_map in
-          let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
-          let scheme =
-            match t_opt with
-            | Option.Some t ->
-              (match
-                 Ty.to_type
-                   ~renamer:(Analyser_ctx.Type_ident_renamer.get ctx)
-                   ~vm:tv_map
-                   t
-               with
-               | Option.Some ty ->
-                 Scheme.Forall (tvs, Type.TFun (ty, Type.TCon (ident, tyvs)))
-               | Option.None -> assert false)
-            | Option.None -> Scheme.Forall (tvs, Type.TCon (ident, tyvs))
-          in
-          let _, ctx = Analyser_ctx.declare_and_introduce ctx ~ident_str ~scheme in
-          ctx)
+      let ctx =
+        Analyser_ctx.Type_ident_renamer.map ctx ~f:(fun _ -> type_ident_renamer)
       in
-      ctx, Core.Decl.TypeDecl ident
+      let%map ctx, constrs, _ =
+        List.fold
+          ctors
+          ~init:(Result.Ok (ctx, [], 0))
+          ~f:(fun ctx_opt (ident_str, t_opt) ->
+            let%bind ctx, constrs, tag = ctx_opt in
+            let%map tv_map = get_tvs () in
+            let tvs = Map.data tv_map in
+            let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
+            let arg_scheme_opt, res_scheme =
+              match t_opt with
+              | Option.Some t ->
+                (match
+                   Ty.to_type
+                     ~renamer:(Analyser_ctx.Type_ident_renamer.get ctx)
+                     ~vm:tv_map
+                     t
+                 with
+                 | Option.Some ty ->
+                   ( Option.Some (Scheme.Forall (tvs, ty))
+                   , Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs)) )
+                 | Option.None -> assert false)
+              | Option.None ->
+                Option.None, Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs))
+            in
+            let ident_constr, ctx =
+              Analyser_ctx.constr_declare_and_introduce
+                ctx
+                ~ident_str
+                ~entry:{ parent = ident_parent; tag; arg_scheme_opt; res_scheme }
+            in
+            ctx, ident_constr :: constrs, tag + 1)
+      in
+      let ctx =
+        Analyser_ctx.Tenv.map
+          ctx
+          ~f:(Type_env.introduce ~id:ident_parent ~data:{ arity; constrs })
+      in
+      ctx, Core.Decl.TypeDecl ident_parent
   ;;
 end
 

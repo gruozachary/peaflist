@@ -141,9 +141,23 @@ end = struct
          | _ -> assert false)
 
   and apply () =
-    let%bind x = atom () in
-    let%map xs = many (atom ()) in
+    let%bind x = simple () in
+    let%map xs = many (simple ()) in
     List.fold ~init:x ~f:(fun f x -> Expr.Apply (f, x)) xs
+
+  and simple () =
+    choice
+      [ (let%bind x = Ident.upper in
+         let%map es =
+           attempt
+             (match%map atom () with
+              | Expr.Tuple es -> es
+              | e -> [ e ])
+           <|> return []
+         in
+         Expr.Constr (x, es))
+      ; atom ()
+      ]
 
   and atom () =
     choice
@@ -151,8 +165,6 @@ end = struct
          Expr.Int x)
       ; (let%map x = Ident.lower in
          Expr.Id x)
-      ; (let%map x = Ident.upper in
-         Expr.Constr x)
       ; (match%map tuple_1 (defer parse) with
          | [ e ] -> Expr.Group e
          | es -> Expr.Tuple es)

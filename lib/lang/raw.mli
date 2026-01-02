@@ -30,7 +30,7 @@ module Expr : sig
   type t =
     | Int of int
     | Id of id
-    | Constr of id
+    | Constr of id * t list
     | Apply of t * t
     | Group of t
     | Lambda of id * t
