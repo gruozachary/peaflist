@@ -176,12 +176,34 @@ module Expr = struct
          let ty = instantiate ctx sc in
          Result.Ok (Subst.empty, ty, Core.Expr.Id (ident, ty))
        | Option.None -> Result.Error "Unbound variable")
-    | Constr ident_str ->
-      (match Analyser_ctx.fetch_and_lookup ctx ~ident_str with
-       | Option.Some (ident, sc) ->
-         let ty = instantiate ctx sc in
-         Result.Ok (Subst.empty, ty, Core.Expr.Constr (ident, ty))
-       | Option.None -> Result.Error "Unbound constructor")
+    | Constr (ident_str, es) ->
+      let%bind ident, entry =
+        Analyser_ctx.constr_fetch_and_lookup ctx ~ident_str
+        |> Result.of_option ~error:"Unbound constructor"
+      in
+      let ty = instantiate ctx entry.scheme in
+      (* TODO: this ought to be neatened up *)
+      let ty_param, ty_res =
+        match ty with
+        | Type.TFun (ty_arg, ty_res) -> ty_arg, ty_res
+        | _ -> raise_s [%message "Constructor in environment isn't in correct form"]
+      in
+      let%map s, es_c =
+        match es with
+        | [ e ] ->
+          let%bind s_arg, ty_arg, e_c = infer ctx e in
+          let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
+          s, [ e_c ]
+        | es ->
+          let%bind s_arg, ty_arg, e_c = infer ctx (Tuple es) in
+          let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
+          ( s
+          , (match e_c with
+             | Core.Expr.Tuple (es_c, _) -> es_c
+             | _ -> raise_s [%message "Typecheck wasn't tuple"]) )
+      in
+      let t = Subst.apply_type ~sub:s ty_res in
+      s, t, Core.Expr.Constr (ident, es_c, t)
     | Lambda (ident_str, e) ->
       let ty = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let ident, ctx =
