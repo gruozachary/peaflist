@@ -1,3 +1,3 @@
-include Monotonic.Make (struct
-    let prefix = "constr_ident"
+include Ident.Make (struct
+    let name = "constr_ident"
   end)
