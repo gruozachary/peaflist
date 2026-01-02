@@ -69,7 +69,7 @@ module Pat = struct
     match p with
     | CtorApp (ident_str, po) ->
       let%bind ident =
-        Analyser_ctx.Ident_renamer.get ctx
+        Analyser_ctx.Var_ident_renamer.get ctx
         |> Renamer.fetch ~str:ident_str
         |> Result.of_option ~error:"Constructor name unrecognised"
       in
@@ -103,7 +103,7 @@ module Pat = struct
     | Ident ident_str ->
       let t = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let ident, r =
-        Analyser_ctx.Ident_renamer.get ctx
+        Analyser_ctx.Var_ident_renamer.get ctx
         |> Renamer.declare_and_fetch
              ~str:ident_str
              ~heart:(Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
@@ -265,7 +265,7 @@ module Expr = struct
          , Core.Expr.Apply
              ( Core.Expr.Apply
                  ( Core.Expr.Id
-                     ( Analyser_ctx.Ident_renamer.get ctx
+                     ( Analyser_ctx.Var_ident_renamer.get ctx
                        |> Renamer.fetch
                             ~str:
                               (match o with
@@ -294,7 +294,7 @@ module Expr = struct
             in
             let s = Subst.compose s s_uni in
             let ctx =
-              Analyser_ctx.Ident_renamer.map ctx ~f:(fun x -> Renamer.merge r x)
+              Analyser_ctx.Var_ident_renamer.map ctx ~f:(fun x -> Renamer.merge r x)
               |> Analyser_ctx.Env.map
                    ~f:
                      (Term_env.merge g ~f:(fun ~key:_ m ->

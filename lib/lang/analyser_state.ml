@@ -2,14 +2,14 @@ open! Base
 
 type t =
   { mutable next_tv : Type_var.t
-  ; ident_renamer_heart : Ident.t Renamer.heart
+  ; ident_renamer_heart : Var_ident.t Renamer.heart
   ; type_ident_renamer_heart : Type_ident.t Renamer.heart
   ; constr_ident_renamer_heart : Constr_ident.t Renamer.heart
   }
 
 let create () =
   { next_tv = Type_var.zero
-  ; ident_renamer_heart = Renamer.fresh_heart (module Ident)
+  ; ident_renamer_heart = Renamer.fresh_heart (module Var_ident)
   ; type_ident_renamer_heart = Renamer.fresh_heart (module Type_ident)
   ; constr_ident_renamer_heart = Renamer.fresh_heart (module Constr_ident)
   }

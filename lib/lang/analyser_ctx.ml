@@ -5,7 +5,7 @@ type t =
   ; tenv : Type_env.t
   ; cenv : Constr_env.t
   ; state : Analyser_state.t
-  ; ident_renamer : Ident.t Renamer.t
+  ; ident_renamer : Var_ident.t Renamer.t
   ; type_ident_renamer : Type_ident.t Renamer.t
   ; constr_ident_renamer : Constr_ident.t Renamer.t
   }
@@ -94,7 +94,7 @@ module State = struct
   let get ctx = ctx.state
 end
 
-module Ident_renamer = struct
+module Var_ident_renamer = struct
   let get ctx = ctx.ident_renamer
   let map ctx ~f = { ctx with ident_renamer = f ctx.ident_renamer }
 end
