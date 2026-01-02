@@ -197,28 +197,31 @@ module Expr = struct
         Analyser_ctx.constr_fetch_and_lookup ctx ~ident_str
         |> Result.of_option ~error:"Unbound constructor"
       in
-      (match entry.arg_scheme_opt with
-       | Option.None ->
-         let ty_res = instantiate ctx entry.res_scheme in
-         Result.Ok (Subst.empty, ty_res, Core.Expr.Constr (ident, [], ty_res))
-       | Option.Some arg_scheme ->
-         let ty_param, ty_res = instantiate_two ctx arg_scheme entry.res_scheme in
-         let%map s, es_c =
-           match es with
-           | [ e ] ->
-             let%bind s_arg, ty_arg, e_c = infer ctx e in
-             let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
-             s, [ e_c ]
-           | es ->
-             let%bind s_arg, ty_arg, e_c = infer ctx (Tuple es) in
-             let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
-             ( s
-             , (match e_c with
-                | Core.Expr.Tuple (es_c, _) -> es_c
-                | _ -> raise_s [%message "Typecheck wasn't tuple"]) )
-         in
-         let t = Subst.apply_type ~sub:s ty_res in
-         s, t, Core.Expr.Constr (ident, es_c, t))
+      let%map s, t, es_c =
+        match entry.arg_scheme_opt with
+        | Option.None ->
+          let ty_res = instantiate ctx entry.res_scheme in
+          return (Subst.empty, ty_res, [])
+        | Option.Some arg_scheme ->
+          let ty_param, ty_res = instantiate_two ctx arg_scheme entry.res_scheme in
+          let%map s, es_c =
+            match es with
+            | [ e ] ->
+              let%bind s_arg, ty_arg, e_c = infer ctx e in
+              let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
+              s, [ e_c ]
+            | es ->
+              let%bind s_arg, ty_arg, e_c = infer ctx (Tuple es) in
+              let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
+              ( s
+              , (match e_c with
+                 | Core.Expr.Tuple (es_c, _) -> es_c
+                 | _ -> raise_s [%message "Typecheck wasn't tuple"]) )
+          in
+          let t = Subst.apply_type ~sub:s ty_res in
+          s, t, es_c
+      in
+      s, t, Core.Expr.Constr (ident, es_c, t)
     | Lambda (ident_str, e) ->
       let ty = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let ident, ctx =
