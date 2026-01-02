@@ -3,7 +3,8 @@ open! Base
 type entry =
   { parent : Type_ident.t
   ; tag : int
-  ; scheme : Scheme.t
+  ; arg_scheme_opt : Scheme.t Option.t
+  ; res_scheme : Scheme.t
   }
 
 type t = (Constr_ident.t, entry, Constr_ident.comparator_witness) Map.t

@@ -197,29 +197,28 @@ module Expr = struct
         Analyser_ctx.constr_fetch_and_lookup ctx ~ident_str
         |> Result.of_option ~error:"Unbound constructor"
       in
-      let ty = instantiate ctx entry.scheme in
-      (* TODO: this ought to be neatened up *)
-      let ty_param, ty_res =
-        match ty with
-        | Type.TFun (ty_arg, ty_res) -> ty_arg, ty_res
-        | _ -> raise_s [%message "Constructor in environment isn't in correct form"]
-      in
-      let%map s, es_c =
-        match es with
-        | [ e ] ->
-          let%bind s_arg, ty_arg, e_c = infer ctx e in
-          let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
-          s, [ e_c ]
-        | es ->
-          let%bind s_arg, ty_arg, e_c = infer ctx (Tuple es) in
-          let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
-          ( s
-          , (match e_c with
-             | Core.Expr.Tuple (es_c, _) -> es_c
-             | _ -> raise_s [%message "Typecheck wasn't tuple"]) )
-      in
-      let t = Subst.apply_type ~sub:s ty_res in
-      s, t, Core.Expr.Constr (ident, es_c, t)
+      (match entry.arg_scheme_opt with
+       | Option.None ->
+         let ty_res = instantiate ctx entry.res_scheme in
+         Result.Ok (Subst.empty, ty_res, Core.Expr.Constr (ident, [], ty_res))
+       | Option.Some arg_scheme ->
+         let ty_param, ty_res = instantiate_two ctx arg_scheme entry.res_scheme in
+         let%map s, es_c =
+           match es with
+           | [ e ] ->
+             let%bind s_arg, ty_arg, e_c = infer ctx e in
+             let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
+             s, [ e_c ]
+           | es ->
+             let%bind s_arg, ty_arg, e_c = infer ctx (Tuple es) in
+             let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
+             ( s
+             , (match e_c with
+                | Core.Expr.Tuple (es_c, _) -> es_c
+                | _ -> raise_s [%message "Typecheck wasn't tuple"]) )
+         in
+         let t = Subst.apply_type ~sub:s ty_res in
+         s, t, Core.Expr.Constr (ident, es_c, t))
     | Lambda (ident_str, e) ->
       let ty = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let ident, ctx =
@@ -415,7 +414,7 @@ module Decl = struct
             let%map tv_map = get_tvs () in
             let tvs = Map.data tv_map in
             let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
-            let scheme =
+            let arg_scheme_opt, res_scheme =
               match t_opt with
               | Option.Some t ->
                 (match
@@ -425,15 +424,17 @@ module Decl = struct
                      t
                  with
                  | Option.Some ty ->
-                   Scheme.Forall (tvs, Type.TFun (ty, Type.TCon (ident_parent, tyvs)))
+                   ( Option.Some (Scheme.Forall (tvs, ty))
+                   , Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs)) )
                  | Option.None -> assert false)
-              | Option.None -> Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs))
+              | Option.None ->
+                Option.None, Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs))
             in
             let ident_constr, ctx =
               Analyser_ctx.constr_declare_and_introduce
                 ctx
                 ~ident_str
-                ~entry:{ parent = ident_parent; tag; scheme }
+                ~entry:{ parent = ident_parent; tag; arg_scheme_opt; res_scheme }
             in
             ctx, ident_constr :: constrs, tag + 1)
       in
