@@ -414,10 +414,10 @@ module Decl = struct
           ~init:(Result.Ok (ctx, [], 0))
           ~f:(fun ctx_opt (ident_str, t_opt) ->
             let%bind ctx, constrs, tag = ctx_opt in
-            let%map tv_map = get_tvs () in
+            let%bind tv_map = get_tvs () in
             let tvs = Map.data tv_map in
             let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
-            let arg_scheme_opt, res_scheme =
+            let%map arg_scheme_opt, res_scheme =
               match t_opt with
               | Option.Some t ->
                 (match
@@ -427,11 +427,12 @@ module Decl = struct
                      t
                  with
                  | Option.Some ty ->
-                   ( Option.Some (Scheme.Forall (tvs, ty))
-                   , Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs)) )
-                 | Option.None -> assert false)
+                   return
+                     ( Option.Some (Scheme.Forall (tvs, ty))
+                     , Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs)) )
+                 | Option.None -> Result.Error "Unbound type variable")
               | Option.None ->
-                Option.None, Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs))
+                return (Option.None, Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs)))
             in
             let ident_constr, ctx =
               Analyser_ctx.constr_declare_and_introduce
