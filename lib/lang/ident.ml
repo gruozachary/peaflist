@@ -18,12 +18,16 @@ module Make (Item : sig
       { index : Monotonic.t
       ; str : string
       }
-    [@@deriving sexp_of]
 
     let create index str = { index; str }
 
     let to_string ident =
       Item.name ^ "[" ^ Monotonic.to_string ident.index ^ "]{" ^ ident.str ^ "}"
+    ;;
+
+    let sexp_of_t ident =
+      Sexp.List
+        [ Sexp.Atom Item.name; Sexp.Atom ident.str; Monotonic.sexp_of_t ident.index ]
     ;;
 
     let compare x y = Monotonic.compare x.index y.index
