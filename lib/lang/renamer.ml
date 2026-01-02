@@ -1,17 +1,17 @@
 open! Base
 
-type 'mono heart =
-  { succ : 'mono -> 'mono
-  ; mutable next_ident : 'mono
+type 'ident heart =
+  { create_ident : Monotonic.t -> string -> 'ident
+  ; mutable next_monotonic : Monotonic.t
   }
 
-type 'mono t =
-  { map : (string, 'mono, String.comparator_witness) Map.t
-  ; heart : 'mono heart
+type 'ident t =
+  { map : (string, 'ident, String.comparator_witness) Map.t
+  ; heart : 'ident heart
   }
 
-let fresh_heart (type a) (module M : Monotonic.S with type t = a) =
-  { succ = M.succ; next_ident = M.zero }
+let fresh_heart (type a) (module M : Ident.S with type t = a) =
+  { create_ident = M.create; next_monotonic = Monotonic.zero }
 ;;
 
 let empty heart = { map = Map.empty (module String); heart }
@@ -19,9 +19,9 @@ let empty heart = { map = Map.empty (module String); heart }
 let declare r ~heart ~str =
   if not (phys_equal heart r.heart)
   then raise_s [%message "Only one heart can be used per renamer"];
-  let i = heart.next_ident in
-  heart.next_ident <- heart.succ heart.next_ident;
-  { r with map = Map.set r.map ~key:str ~data:i }
+  let i = heart.next_monotonic in
+  heart.next_monotonic <- Monotonic.succ heart.next_monotonic;
+  { r with map = Map.set r.map ~key:str ~data:(heart.create_ident i str) }
 ;;
 
 let fetch r ~str = Map.find r.map str

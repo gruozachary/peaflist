@@ -1,8 +1,8 @@
 type t
 
 val empty : unit -> t
-val fetch_and_lookup : t -> ident_str:string -> (Ident.t * Scheme.t) option
-val declare_and_introduce : t -> ident_str:string -> scheme:Scheme.t -> Ident.t * t
+val fetch_and_lookup : t -> ident_str:string -> (Var_ident.t * Scheme.t) option
+val declare_and_introduce : t -> ident_str:string -> scheme:Scheme.t -> Var_ident.t * t
 
 val type_fetch_and_lookup
   :  t
@@ -45,9 +45,9 @@ module State : sig
   val get : t -> Analyser_state.t
 end
 
-module Ident_renamer : sig
-  val get : t -> Ident.t Renamer.t
-  val map : t -> f:(Ident.t Renamer.t -> Ident.t Renamer.t) -> t
+module Var_ident_renamer : sig
+  val get : t -> Var_ident.t Renamer.t
+  val map : t -> f:(Var_ident.t Renamer.t -> Var_ident.t Renamer.t) -> t
 end
 
 module Type_ident_renamer : sig

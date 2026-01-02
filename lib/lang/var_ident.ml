@@ -1,3 +1,3 @@
 include Ident.Make (struct
-    let name = "constr_ident"
+    let name = "var_ident"
   end)

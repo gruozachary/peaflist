@@ -1,3 +1,3 @@
-include Monotonic.Make (struct
-    let prefix = "tvar"
-  end)
+include Monotonic
+
+let to_string x = "tvar(" ^ to_string x ^ ")"

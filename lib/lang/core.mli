@@ -3,19 +3,19 @@ open! Base
 module Pat : sig
   type t =
     | Int of int
-    | Ident of Ident.t * Type.t
+    | Ident of Var_ident.t * Type.t
     | Tuple of t list * Type.t
-    | CtorApp of Ident.t * t Option.t * Type.t
+    | CtorApp of Var_ident.t * t Option.t * Type.t
 end
 
 module Expr : sig
   type t =
     | Int of int
-    | Id of Ident.t * Type.t
+    | Id of Var_ident.t * Type.t
     | Constr of Constr_ident.t * t List.t * Type.t
     | Apply of t * t * Type.t
-    | Lambda of Ident.t * Type.t * t
-    | Let of Ident.t * Scheme.t * t * t
+    | Lambda of Var_ident.t * Type.t * t
+    | Let of Var_ident.t * Scheme.t * t * t
     | Match of t * (Pat.t * t) list * Type.t
     | Tuple of t list * Type.t
 
@@ -25,7 +25,7 @@ end
 
 module Decl : sig
   type t =
-    | ValDecl of Ident.t * Expr.t
+    | ValDecl of Var_ident.t * Expr.t
     | TypeDecl of Type_ident.t
 
   val zonk : Subst.t -> t -> t
