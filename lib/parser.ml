@@ -227,7 +227,7 @@ let type_decl =
       (let%bind _ = symbol "|" in
        let%bind y = Ident.upper in
        let%map t =
-         option ~def:None (keyword "of" >*> Type.parse () >>| fun t -> Some t)
+         keyword "of" >*> Type.parse () >>| Option.some <|> return Option.None
        in
        y, t)
   in
