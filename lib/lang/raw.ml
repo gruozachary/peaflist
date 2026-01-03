@@ -61,45 +61,47 @@ module Pat = struct
     | Int of int
     | Ident of id
     | Tuple of t list
-    | CtorApp of id * t Option.t
+    | CtorApp of id * t list
   [@@deriving eq]
 
   let rec infer ctx p =
     let open Result.Let_syntax in
+    let empty_ident_renamer =
+      Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
+    in
     match p with
-    | CtorApp (ident_str, po) ->
-      let%bind ident =
-        Analyser_ctx.Var_ident_renamer.get ctx
-        |> Renamer.fetch ~str:ident_str
-        |> Result.of_option ~error:"Constructor name unrecognised"
+    | CtorApp (ident_str, ps) ->
+      let%bind ident, entry =
+        Analyser_ctx.constr_fetch_and_lookup ctx ~ident_str
+        |> Result.of_option ~error:"Unbound constructor"
       in
-      let%bind t =
-        Result.of_option
-          ~error:"Unbound constructor in pattern"
-          (Option.map
-             (Analyser_ctx.Env.get ctx |> Term_env.lookup ~id:ident)
-             ~f:(instantiate ctx))
+      let%map s, g, r, t, ps_c =
+        match entry.arg_scheme_opt with
+        | Option.None ->
+          let ty_res = instantiate ctx entry.res_scheme in
+          return (Subst.empty, Term_env.empty (), empty_ident_renamer, ty_res, [])
+        | Option.Some arg_scheme ->
+          let ty_param, ty_res = instantiate_two ctx arg_scheme entry.res_scheme in
+          let%map s, g, r, ps_c =
+            match ps with
+            | [ p ] ->
+              let%bind s_arg, g_arg, r_arg, ty_arg, p_c = infer ctx p in
+              let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
+              s, g_arg, r_arg, [ p_c ]
+            | ps ->
+              let%bind s_arg, g_arg, r_arg, ty_arg, p_c = infer ctx (Tuple ps) in
+              let%map s = Subst.unify ty_arg ty_param >>| Subst.compose s_arg in
+              ( s
+              , g_arg
+              , r_arg
+              , (match p_c with
+                 | Core.Pat.Tuple (ps_c, _) -> ps_c
+                 | _ -> raise_s [%message "Typecheck wasn't tuple"]) )
+          in
+          let t = Subst.apply_type ~sub:s ty_res in
+          s, g, r, t, ps_c
       in
-      (match t, po with
-       | Type.TFun _, Option.Some p ->
-         let%bind s, g, r, t', p_c = infer ctx p in
-         let t'' = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
-         let%map s' = Subst.unify (Type.TFun (t', t'')) t in
-         let s'' = Subst.compose s s' in
-         ( s''
-         , g
-         , r
-         , Subst.apply_type ~sub:s'' t''
-         , Core.Pat.CtorApp (ident, Option.Some p_c, t'') )
-       | Type.TCon _, Option.None ->
-         Result.Ok
-           ( Subst.empty
-           , Term_env.empty ()
-           , Renamer.empty
-               (Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
-           , t
-           , Core.Pat.CtorApp (ident, Option.None, t) )
-       | _ -> Result.Error "Constructor arity mismatch in pattern")
+      s, g, r, t, Core.Pat.CtorApp (ident, ps_c, t)
     | Ident ident_str ->
       let t = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let ident, r =
@@ -118,20 +120,13 @@ module Pat = struct
       Result.Ok
         ( Subst.empty
         , Term_env.empty ()
-        , Renamer.empty (Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
+        , empty_ident_renamer
         , make_prim_tcon ctx "int"
         , Core.Pat.Int x )
     | Tuple ps ->
       let%map s, g, r, ts, p_cs =
         List.fold
-          ~init:
-            (Result.Ok
-               ( Subst.empty
-               , Term_env.empty ()
-               , Renamer.empty
-                   (Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
-               , []
-               , [] ))
+          ~init:(Result.Ok (Subst.empty, Term_env.empty (), empty_ident_renamer, [], []))
           ~f:(fun sgo p ->
             let%bind s, g, r, ts, p_cs = sgo in
             let%bind s', g', r', t, p_c = infer ctx p in

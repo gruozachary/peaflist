@@ -5,15 +5,15 @@ module Pat = struct
     | Int of int
     | Ident of Var_ident.t * Type.t
     | Tuple of t list * Type.t
-    | CtorApp of Var_ident.t * t Option.t * Type.t
+    | CtorApp of Constr_ident.t * t List.t * Type.t
   [@@deriving sexp_of]
 
   let rec zonk sub = function
     | Int x -> Int x
     | Ident (ident, t) -> Ident (ident, Subst.zonk_type ~sub t)
     | Tuple (ts, t) -> Tuple (List.map ~f:(zonk sub) ts, Subst.zonk_type ~sub t)
-    | CtorApp (ident, p_opt, t) ->
-      CtorApp (ident, Option.map ~f:(zonk sub) p_opt, Subst.zonk_type ~sub t)
+    | CtorApp (ident, ps, t) ->
+      CtorApp (ident, List.map ~f:(zonk sub) ps, Subst.zonk_type ~sub t)
   ;;
 end
 

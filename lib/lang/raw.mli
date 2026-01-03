@@ -11,7 +11,7 @@ module Pat : sig
     | Int of int
     | Ident of id
     | Tuple of t list
-    | CtorApp of id * t Option.t
+    | CtorApp of id * t list
 
   val equal : t -> t -> bool
 end
