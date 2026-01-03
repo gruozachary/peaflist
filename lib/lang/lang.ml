@@ -89,3 +89,6 @@ module Type_env : Type_env_pub = Type_env
 module Analyser_ctx : Analyser_ctx_pub = Analyser_ctx
 module Scheme : Scheme_pub = Scheme
 module Type : Type_pub = Type
+module Var_ident = Var_ident
+module Type_ident = Type_ident
+module Constr_ident = Constr_ident
