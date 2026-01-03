@@ -5,7 +5,7 @@ module Pat = struct
     | Int of int
     | Ident of Var_ident.t * Type.t
     | Tuple of t list * Type.t
-    | CtorApp of Var_ident.t * t Option.t * Type.t
+    | CtorApp of Constr_ident.t * t Option.t * Type.t
   [@@deriving sexp_of]
 
   let rec zonk sub = function

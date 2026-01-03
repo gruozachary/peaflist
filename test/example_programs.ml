@@ -65,10 +65,8 @@ vd length := fun l ->
               ( "l"
               , Expr.Match
                   ( Expr.Id "l"
-                  , [ Pat.CtorApp ("Nil", None), Expr.Int 0
-                    ; ( Pat.CtorApp
-                          ( "Cons"
-                          , Option.Some (Pat.Tuple [ Pat.Ident "x"; Pat.Ident "xs" ]) )
+                  , [ Pat.CtorApp ("Nil", []), Expr.Int 0
+                    ; ( Pat.CtorApp ("Cons", [ Pat.Ident "x"; Pat.Ident "xs" ])
                       , Expr.BinOp
                           ( Expr.Int 1
                           , Expr.Bin_op.Plus

@@ -74,13 +74,24 @@ module Pattern : sig
 end = struct
   let rec parse () =
     choice
+      [ (let%bind x = Ident.upper in
+         let%map ps =
+           attempt
+             (match%map atom () with
+              | Pat.Tuple ps -> ps
+              | p -> [ p ])
+           <|> return []
+         in
+         Pat.CtorApp (x, ps))
+      ; atom ()
+      ]
+
+  and atom () =
+    choice
       [ (let%map x = int in
          Pat.Int x)
       ; (let%map x = Ident.lower in
          Pat.Ident x)
-      ; (let%bind x = Ident.upper in
-         let%map p_opt = option_opt (defer parse) in
-         Pat.CtorApp (x, p_opt))
       ; (let%map ps = tuple_1 (defer parse) in
          Pat.Tuple ps)
       ]
