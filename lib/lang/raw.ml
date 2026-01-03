@@ -299,7 +299,9 @@ module Expr = struct
                         | `Both (_, r) -> Option.Some r))
             in
             let%map s_exp, t_exp, e_c = infer ctx e in
-            Subst.compose s s_exp, t_exp :: ts, (p_c, e_c) :: arms_c)
+            ( Subst.compose s s_exp
+            , Subst.apply_type ~sub:s t_exp :: ts
+            , (p_c, e_c) :: arms_c ))
       in
       let%bind t, ts =
         match ts with
