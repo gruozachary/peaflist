@@ -105,7 +105,7 @@ module Pat = struct
     | Ident ident_str ->
       let t = Analyser_ctx.State.get ctx |> Analyser_state.fresh in
       let ident, r =
-        Analyser_ctx.Var_ident_renamer.get ctx
+        empty_ident_renamer
         |> Renamer.declare_and_fetch
              ~str:ident_str
              ~heart:(Analyser_ctx.State.get ctx |> Analyser_state.ident_renamer_heart)
