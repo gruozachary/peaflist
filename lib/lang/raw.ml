@@ -376,75 +376,79 @@ module Decl = struct
 
   let typecheck ctx d =
     let open Result.Let_syntax in
-    match d with
-    | ValDecl (ident_str, e) ->
-      let%map s, ty, e_c = Expr.infer ctx e in
-      let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
-      let scheme = generalise ctx ty in
-      let ident, ctx = Analyser_ctx.declare_and_introduce ctx ~ident_str ~scheme in
-      ctx, Core.Decl.ValDecl (ident, e_c)
-    | TypeDecl (x, utvs, ctors) ->
-      let arity = List.length utvs in
-      let get_tvs () =
-        match
-          Map.of_alist
-            (module String)
-            (List.map
-               ~f:(fun tv -> tv, Analyser_ctx.State.get ctx |> Analyser_state.fresh_tv)
-               utvs)
-        with
-        | `Ok x -> Result.Ok x
-        | `Duplicate_key _ -> Result.Error "Duplicate type variable"
-      in
-      let ident_parent, type_ident_renamer =
-        Analyser_ctx.Type_ident_renamer.get ctx
-        |> Renamer.declare_and_fetch
-             ~heart:(Analyser_ctx.State.get ctx |> Analyser_state.type_ident_renamer_heart)
-             ~str:x
-      in
-      let ctx =
-        Analyser_ctx.Type_ident_renamer.map ctx ~f:(fun _ -> type_ident_renamer)
-      in
-      let%map ctx, constrs, _ =
-        List.fold
-          ctors
-          ~init:(Result.Ok (ctx, [], 0))
-          ~f:(fun ctx_opt (ident_str, t_opt) ->
-            let%bind ctx, constrs, tag = ctx_opt in
-            let%bind tv_map = get_tvs () in
-            let tvs = Map.data tv_map in
-            let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
-            let%map arg_scheme_opt, res_scheme =
-              match t_opt with
-              | Option.Some t ->
-                (match
-                   Ty.to_type
-                     ~renamer:(Analyser_ctx.Type_ident_renamer.get ctx)
-                     ~vm:tv_map
-                     t
-                 with
-                 | Option.Some ty ->
-                   return
-                     ( Option.Some (Scheme.Forall (tvs, ty))
-                     , Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs)) )
-                 | Option.None -> Result.Error "Unbound type variable")
-              | Option.None ->
-                return (Option.None, Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs)))
-            in
-            let ident_constr, ctx =
-              Analyser_ctx.constr_declare_and_introduce
-                ctx
-                ~ident_str
-                ~entry:{ parent = ident_parent; tag; arg_scheme_opt; res_scheme }
-            in
-            ctx, ident_constr :: constrs, tag + 1)
-      in
-      let ctx =
-        Analyser_ctx.Tenv.map
-          ctx
-          ~f:(Type_env.introduce ~id:ident_parent ~data:{ arity; constrs })
-      in
-      ctx, Core.Decl.TypeDecl ident_parent
+    let%map s, ctx, d =
+      match d with
+      | ValDecl (ident_str, e) ->
+        let%map s, ty, e_c = Expr.infer ctx e in
+        let ctx = Analyser_ctx.Env.map ctx ~f:(Subst.apply_term_env ~sub:s) in
+        let scheme = generalise ctx ty in
+        let ident, ctx = Analyser_ctx.declare_and_introduce ctx ~ident_str ~scheme in
+        s, ctx, Core.Decl.ValDecl (ident, e_c)
+      | TypeDecl (x, utvs, ctors) ->
+        let arity = List.length utvs in
+        let get_tvs () =
+          match
+            Map.of_alist
+              (module String)
+              (List.map
+                 ~f:(fun tv -> tv, Analyser_ctx.State.get ctx |> Analyser_state.fresh_tv)
+                 utvs)
+          with
+          | `Ok x -> Result.Ok x
+          | `Duplicate_key _ -> Result.Error "Duplicate type variable"
+        in
+        let ident_parent, type_ident_renamer =
+          Analyser_ctx.Type_ident_renamer.get ctx
+          |> Renamer.declare_and_fetch
+               ~heart:
+                 (Analyser_ctx.State.get ctx |> Analyser_state.type_ident_renamer_heart)
+               ~str:x
+        in
+        let ctx =
+          Analyser_ctx.Type_ident_renamer.map ctx ~f:(fun _ -> type_ident_renamer)
+        in
+        let%map ctx, constrs, _ =
+          List.fold
+            ctors
+            ~init:(Result.Ok (ctx, [], 0))
+            ~f:(fun ctx_opt (ident_str, t_opt) ->
+              let%bind ctx, constrs, tag = ctx_opt in
+              let%bind tv_map = get_tvs () in
+              let tvs = Map.data tv_map in
+              let tyvs = List.map ~f:(fun tv -> Type.TVar tv) tvs in
+              let%map arg_scheme_opt, res_scheme =
+                match t_opt with
+                | Option.Some t ->
+                  (match
+                     Ty.to_type
+                       ~renamer:(Analyser_ctx.Type_ident_renamer.get ctx)
+                       ~vm:tv_map
+                       t
+                   with
+                   | Option.Some ty ->
+                     return
+                       ( Option.Some (Scheme.Forall (tvs, ty))
+                       , Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs)) )
+                   | Option.None -> Result.Error "Unbound type variable")
+                | Option.None ->
+                  return (Option.None, Scheme.Forall (tvs, Type.TCon (ident_parent, tyvs)))
+              in
+              let ident_constr, ctx =
+                Analyser_ctx.constr_declare_and_introduce
+                  ctx
+                  ~ident_str
+                  ~entry:{ parent = ident_parent; tag; arg_scheme_opt; res_scheme }
+              in
+              ctx, ident_constr :: constrs, tag + 1)
+        in
+        let ctx =
+          Analyser_ctx.Tenv.map
+            ctx
+            ~f:(Type_env.introduce ~id:ident_parent ~data:{ arity; constrs })
+        in
+        Subst.empty, ctx, Core.Decl.TypeDecl ident_parent
+    in
+    ctx, Core.Decl.zonk s d
   ;;
 end
 
