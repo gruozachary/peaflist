@@ -5,13 +5,6 @@ module type Term_env_pub = sig
   end
   with type t = Term_env.t
 
-module type Renamer_pub = sig
-    type 'mono t
-
-    val fetch : 'mono t -> str:string -> 'mono Option.t
-  end
-  with type 'mono t = 'mono Renamer.t
-
 module type Type_env_pub = sig
     type t
 
@@ -84,7 +77,7 @@ module Raw = Raw
 module Core = Core
 module Term_env : Term_env_pub = Term_env
 module Constr_env : Constr_env_pub = Constr_env
-module Renamer : Renamer_pub = Renamer
+module Renamer = Renamer
 module Type_env : Type_env_pub = Type_env
 module Analyser_ctx : Analyser_ctx_pub = Analyser_ctx
 module Scheme : Scheme_pub = Scheme
