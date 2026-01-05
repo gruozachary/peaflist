@@ -35,7 +35,7 @@ module Expr = struct
           ident
         | Option.Some ident -> ident
       in
-      Var (ident, t), (ident, e) :: bindings
+      Var (ident, t), (ident, e, Scheme.Forall ([], t)) :: bindings
     in
     let rec go ?ident_opt e =
       match e with
@@ -57,8 +57,8 @@ module Expr = struct
             , t
             , List.fold
                 ~init:(Any e_a)
-                ~f:(fun (Any e_a_acc) (ident, e_a_bind) ->
-                  Any (Let (ident, _, e_a_bind, Any e_a_acc)))
+                ~f:(fun (Any e_a_acc) (ident, e_a_bind, scheme) ->
+                  Any (Let (ident, scheme, e_a_bind, Any e_a_acc)))
                 bindings )
         , [] )
       | Core.Expr.Let (ident, scheme, e_bind, e_body) ->
@@ -67,7 +67,7 @@ module Expr = struct
         ( e_body_a
         , List.append
             (match bindings with
-             | [] -> [ ident, Any e_bind_a ]
+             | [] -> [ ident, Any e_bind_a, scheme ]
              | _ -> bindings)
             bindings' )
       | Core.Expr.Match _ -> raise_s [%message "Match not currently implemented"]
