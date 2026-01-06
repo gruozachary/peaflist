@@ -150,7 +150,9 @@ let run toplevel_ctx =
         }
         core
     in
-    Stdio.print_endline (Mid.Anf.Expr.sexp_of_any_t (Mid.Anf.Expr.apply_bindings e_anf bindings) |> Sexp.to_string_hum);
+    Stdio.print_endline
+      (Mid.Anf.Expr.sexp_of_any_t (Mid.Anf.Expr.apply_bindings e_anf bindings)
+       |> Sexp.to_string_hum);
     false
   | Line.Decl d ->
     let%map ctx, _ = Lang.Raw.Decl.typecheck toplevel_ctx.semantic_ctx d in

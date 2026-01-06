@@ -69,9 +69,11 @@ module Expr = struct
         ( e_body_a
         , List.append
             bindings'
-            (match bindings with
-             | [] -> [ ident, Any e_bind_a, scheme ]
-             | _ -> bindings) )
+            (match
+               List.find ~f:(fun (ident', _, _) -> Var_ident.equal ident ident') bindings
+             with
+             | Option.None -> (ident, Any e_bind_a, scheme) :: bindings
+             | Option.Some _ -> bindings) )
       | Core.Expr.Match _ -> raise_s [%message "Match not currently implemented"]
       | Core.Expr.Tuple (es, t) ->
         let es_a, bindings = List.map ~f:go es |> List.unzip in
