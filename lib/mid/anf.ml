@@ -43,12 +43,13 @@ module Expr = struct
       | Core.Expr.Id (ident, ty) -> Var (ident, ty), []
       | Core.Expr.Constr (ctor_ident, es, t) ->
         let es_a, bindings = List.map ~f:go es |> List.unzip in
-        List.concat bindings
+        List.rev bindings
+        |> List.concat
         |> add_binding ?ident_opt ~e:(Any (Constr (ctor_ident, es_a, t))) ~t
       | Core.Expr.Apply (e, e', t) ->
         let e_a, bindings = go e
         and e_a', bindings' = go e' in
-        List.append bindings bindings'
+        List.append bindings' bindings
         |> add_binding ?ident_opt ~e:(Any (Apply (e_a, e_a', t))) ~t
       | Core.Expr.Lambda (ident, t, e) ->
         let e_a, bindings = go e in
@@ -66,14 +67,16 @@ module Expr = struct
         let e_body_a, bindings' = go e_body in
         ( e_body_a
         , List.append
+            bindings'
             (match bindings with
              | [] -> [ ident, Any e_bind_a, scheme ]
-             | _ -> bindings)
-            bindings' )
+             | _ -> bindings) )
       | Core.Expr.Match _ -> raise_s [%message "Match not currently implemented"]
       | Core.Expr.Tuple (es, t) ->
         let es_a, bindings = List.map ~f:go es |> List.unzip in
-        List.concat bindings |> add_binding ?ident_opt ~e:(Any (Tuple es_a)) ~t
+        List.rev bindings
+        |> List.concat
+        |> add_binding ?ident_opt ~e:(Any (Tuple es_a)) ~t
     in
     let e, _ = go e in
     e
