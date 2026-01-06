@@ -9,7 +9,7 @@ module Ctx = struct
 end
 
 module Expr = struct
-  type atomic
+  type atomic [@@deriving sexp_of]
   type compound
 
   type _ t =
@@ -20,6 +20,7 @@ module Expr = struct
     | Apply : atomic t * atomic t * Type.t -> compound t
     | Let : Var_ident.t * Scheme.t * any_t * any_t -> compound t
     | Tuple : atomic t List.t -> compound t
+  [@@deriving sexp_of]
 
   (* match will be done later *)
   and any_t = Any : 'a t -> any_t
@@ -78,7 +79,6 @@ module Expr = struct
         |> List.concat
         |> add_binding ?ident_opt ~e:(Any (Tuple es_a)) ~t
     in
-    let e, _ = go e in
-    e
+    go e
   ;;
 end

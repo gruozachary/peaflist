@@ -59,13 +59,6 @@ module type Analyser_ctx_pub = sig
   end
   with type t = Analyser_ctx.t
 
-module type Type_pub = sig
-    type t
-
-    val to_string : t -> string
-  end
-  with type t = Type.t
-
 module Raw = Raw
 module Core = Core
 module Term_env : Term_env_pub = Term_env
@@ -74,7 +67,7 @@ module Renamer = Renamer
 module Type_env : Type_env_pub = Type_env
 module Analyser_ctx : Analyser_ctx_pub = Analyser_ctx
 module Scheme = Scheme
-module Type : Type_pub = Type
+module Type = Type
 module Var_ident = Var_ident
 module Type_ident = Type_ident
 module Constr_ident = Constr_ident
