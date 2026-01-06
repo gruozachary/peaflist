@@ -19,7 +19,7 @@ module Expr = struct
     | Constr : Constr_ident.t * atomic t List.t * Type.t -> compound t
     | Apply : atomic t * atomic t * Type.t -> compound t
     | Let : Var_ident.t * Scheme.t * any_t * any_t -> compound t
-    | Tuple : atomic t List.t -> compound t
+    | Tuple : atomic t List.t * Type.t -> compound t
   [@@deriving sexp_of]
 
   (* match will be done later *)
@@ -79,7 +79,7 @@ module Expr = struct
         let es_a, bindings = List.map ~f:go es |> List.unzip in
         List.rev bindings
         |> List.concat
-        |> add_binding ?ident_opt ~e:(Any (Tuple es_a)) ~t
+        |> add_binding ?ident_opt ~e:(Any (Tuple (es_a, t))) ~t
     in
     go e
   ;;
