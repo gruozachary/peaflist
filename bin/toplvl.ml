@@ -141,6 +141,16 @@ let run toplevel_ctx =
   | Line.Expr e ->
     let%map _, core = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
     Stdio.print_endline (Lang.Core.Expr.sexp_of_t core |> Sexp.to_string_hum);
+    let e_anf, bindings =
+      Mid.Anf.Expr.of_core_expr
+        { renamer = Lang.Analyser_ctx.Var_ident_renamer.get toplevel_ctx.semantic_ctx
+        ; renamer_heart =
+            Lang.Analyser_ctx.State.get toplevel_ctx.semantic_ctx
+            |> Lang.Analyser_state.ident_renamer_heart
+        }
+        core
+    in
+    Stdio.print_endline (Mid.Anf.Expr.sexp_of_any_t (Mid.Anf.Expr.apply_bindings e_anf bindings) |> Sexp.to_string_hum);
     false
   | Line.Decl d ->
     let%map ctx, _ = Lang.Raw.Decl.typecheck toplevel_ctx.semantic_ctx d in
