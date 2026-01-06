@@ -25,6 +25,14 @@ module Expr = struct
   (* match will be done later *)
   and any_t = Any : 'a t -> any_t
 
+  let apply_bindings e bindings =
+    List.fold
+      ~init:(Any e)
+      ~f:(fun (Any e_a_acc) (ident, e_a_bind, scheme) ->
+        Any (Let (ident, scheme, e_a_bind, Any e_a_acc)))
+      bindings
+  ;;
+
   let of_core_expr (ctx : Ctx.t) e =
     let add_binding ?ident_opt ~(e : any_t) ~t bindings =
       let ident =
@@ -54,15 +62,7 @@ module Expr = struct
         |> add_binding ?ident_opt ~e:(Any (Apply (e_a, e_a', t))) ~t
       | Core.Expr.Lambda (ident, t, e) ->
         let e_a, bindings = go e in
-        ( Lambda
-            ( ident
-            , t
-            , List.fold
-                ~init:(Any e_a)
-                ~f:(fun (Any e_a_acc) (ident, e_a_bind, scheme) ->
-                  Any (Let (ident, scheme, e_a_bind, Any e_a_acc)))
-                bindings )
-        , [] )
+        Lambda (ident, t, apply_bindings e_a bindings), []
       | Core.Expr.Let (ident, scheme, e_bind, e_body) ->
         let e_bind_a, bindings = go ?ident_opt:(Option.Some ident) e_bind in
         let e_body_a, bindings' = go e_body in
