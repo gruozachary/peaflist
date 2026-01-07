@@ -55,10 +55,11 @@ module Make (M : Meta) = struct
   module Expr = struct
     module Bin_op = struct
       type t =
-        | Plus
-        | Sub
-        | Mul
-        | Div
+        [ `Plus
+        | `Mul
+        | `Sub
+        | `Div
+        ]
     end
 
     type t =
