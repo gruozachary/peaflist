@@ -232,3 +232,15 @@ let rename_decl ~decl renamer =
   in
   { node }, renamer
 ;;
+
+let rename_prog ~prog renamer =
+  let open Result in
+  let open Let_syntax in
+  List.fold
+    ~init:(return ([], renamer))
+    ~f:(fun acc decl ->
+      let%bind decls, renamer = acc in
+      let%map decl, renamer = rename_decl ~decl renamer in
+      decl :: decls, renamer)
+    prog
+;;
