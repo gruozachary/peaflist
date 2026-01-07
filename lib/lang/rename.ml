@@ -138,7 +138,13 @@ let rec rename_expr ~expr renamer =
         List.map
           ~f:(fun (pat, expr) ->
             let%bind pat, var_renamer = rename_pat ~pat renamer in
-            let%map expr = rename_expr ~expr { renamer with var_renamer } in
+            let%map expr =
+              rename_expr
+                ~expr
+                { renamer with
+                  var_renamer = Renamer.compose renamer.var_renamer var_renamer
+                }
+            in
             pat, expr)
           arms
         |> all
