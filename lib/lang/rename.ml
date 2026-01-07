@@ -47,14 +47,12 @@ type t =
   { var_renamer : Var_ident.t Renamer.t
   ; ctor_renamer : Constr_ident.t Renamer.t
   ; type_renamer : Type_ident.t Renamer.t
-  ; mutable tvar : Type_var.t
   }
 
 let empty () =
   { var_renamer = Renamer.empty Var_ident.create
   ; ctor_renamer = Renamer.empty Constr_ident.create
   ; type_renamer = Renamer.empty Type_ident.create
-  ; tvar = Type_var.zero
   }
 ;;
 
@@ -159,4 +157,78 @@ let rec rename_expr ~expr renamer =
       BinOp (expr_left, op, expr_right)
   in
   { node }
+;;
+
+let rec rename_ty ~ty renamer tvar_map =
+  let open Result in
+  let open Let_syntax in
+  let open Ast.Ty in
+  let%map node =
+    match ty.node with
+    | Var str ->
+      (match Map.find tvar_map str with
+       | Some tvar -> return (Var tvar)
+       | None ->
+         raise_s [%message "Internal compiler error: tvar not found when renaming"])
+    | Con (str, tys) ->
+      let%bind ident =
+        Renamer.fetch ~str renamer.type_renamer
+        |> of_option ~error:"Unbound type identifier"
+      in
+      let%map tys = List.map ~f:(fun ty -> rename_ty ~ty renamer tvar_map) tys |> all in
+      Con (ident, tys)
+    | Prod tys ->
+      let%map tys = List.map ~f:(fun ty -> rename_ty ~ty renamer tvar_map) tys |> all in
+      Prod tys
+    | Fun (ty, ty') ->
+      let%bind ty = rename_ty ~ty renamer tvar_map in
+      let%map ty' = rename_ty ~ty:ty' renamer tvar_map in
+      Fun (ty, ty')
+  in
+  { node }
+;;
+
+let rename_decl ~decl renamer =
+  let open Result in
+  let open Let_syntax in
+  let open Ast.Decl in
+  let%map node, renamer =
+    match decl.node with
+    | Val (str, expr) ->
+      let%map expr = rename_expr ~expr renamer in
+      let ident, var_renamer = Renamer.fresh_add ~str renamer.var_renamer in
+      Val (ident, expr), { renamer with var_renamer }
+    | Type (str, tvars, ctors) ->
+      let ident, type_renamer = Renamer.fresh_add ~str renamer.type_renamer in
+      let%bind tvar_map, _ =
+        List.fold
+          ~init:(Some (Map.empty (module String), 0))
+          ~f:(fun acc key ->
+            let open Option.Let_syntax in
+            let%bind map, data = acc in
+            match Map.add ~key ~data map with
+            | `Duplicate -> None
+            | `Ok map -> Some (map, data + 1))
+          tvars
+        |> of_option ~error:"Duplicate type variables"
+      in
+      let%map ctors, ctor_renamer =
+        List.fold
+          ~init:(return ([], renamer.ctor_renamer))
+          ~f:(fun acc (str, ty) ->
+            let%bind ctors, ctor_renamer = acc in
+            match ty with
+            | Some ty ->
+              let%map ty = rename_ty ~ty renamer tvar_map in
+              let ident, ctor_renamer = Renamer.fresh_add ~str ctor_renamer in
+              (ident, Some ty) :: ctors, ctor_renamer
+            | None ->
+              let ident, ctor_renamer = Renamer.fresh_add ~str ctor_renamer in
+              return ((ident, None) :: ctors, ctor_renamer))
+          ctors
+      in
+      ( Type (ident, List.map tvars ~f:(Map.find_exn tvar_map), ctors)
+      , { renamer with type_renamer; ctor_renamer } )
+  in
+  { node }, renamer
 ;;
