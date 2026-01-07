@@ -11,6 +11,8 @@ module Renamer = struct
     { create_ident; monotonic = Monotonic.zero; map = Map.empty (module String) }
   ;;
 
+  let spawn renamer = { renamer with map = Map.empty (module String) }
+
   let fresh ~str renamer =
     let ident = renamer.create_ident renamer.monotonic str in
     renamer.monotonic <- Monotonic.succ renamer.monotonic;
@@ -24,6 +26,21 @@ module Renamer = struct
   ;;
 
   let fetch ~str renamer = Map.find renamer.map str
+
+  let compose renamer renamer' =
+    { renamer with
+      map =
+        (if phys_equal renamer.monotonic renamer'.monotonic
+         then
+           Map.merge renamer.map renamer'.map ~f:(fun ~key:_ -> function
+             | `Left ident -> Some ident
+             | `Right ident -> Some ident
+             | `Both (_, ident) -> Some ident)
+         else
+           raise_s
+             [%message "Internal compiler error: Invariant on renamer merging broken"])
+    }
+  ;;
 end
 
 type t =
@@ -39,6 +56,46 @@ let empty () =
   ; type_renamer = Renamer.empty Type_ident.create
   ; tvar = Type_var.zero
   }
+;;
+
+let rec rename_pat ~pat renamer =
+  let open Result in
+  let open Let_syntax in
+  let open Ast.Pat in
+  let spawn () = Renamer.spawn renamer.var_renamer in
+  let%map node, var_renamer =
+    match pat.node with
+    | Int x -> return (Int x, spawn ())
+    | Ident str ->
+      let ident, var_renamer = Renamer.fresh_add ~str (spawn ()) in
+      return (Ident ident, var_renamer)
+    | Tuple pats ->
+      let%map pats, var_renamer =
+        List.fold
+          ~init:(return ([], spawn ()))
+          ~f:(fun acc pat ->
+            let%bind pats, var_renamer = acc in
+            let%map pat, var_renamer' = rename_pat ~pat renamer in
+            pat :: pats, Renamer.compose var_renamer var_renamer')
+          pats
+      in
+      Tuple (List.rev pats), var_renamer
+    | Constr (str, pats) ->
+      let%bind ident =
+        Renamer.fetch renamer.ctor_renamer ~str |> of_option ~error:"Unbound variable"
+      in
+      let%map pats, var_renamer =
+        List.fold
+          ~init:(return ([], spawn ()))
+          ~f:(fun acc pat ->
+            let%bind pats, var_renamer = acc in
+            let%map pat, var_renamer' = rename_pat ~pat renamer in
+            pat :: pats, Renamer.compose var_renamer var_renamer')
+          pats
+      in
+      Constr (ident, List.rev pats), var_renamer
+  in
+  { node }, var_renamer
 ;;
 
 let rec rename_expr ~expr renamer =
@@ -80,7 +137,7 @@ let rec rename_expr ~expr renamer =
       let%map arms =
         List.map
           ~f:(fun (pat, expr) ->
-            let%bind var_renamer, pat = _ in
+            let%bind pat, var_renamer = rename_pat ~pat renamer in
             let%map expr = rename_expr ~expr { renamer with var_renamer } in
             pat, expr)
           arms
