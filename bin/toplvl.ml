@@ -99,7 +99,6 @@ type run_output =
 
 let handle_command ctx cmd =
   let open Result in
-  let open Result.Let_syntax in
   match cmd with
   | Line.CommandKind.Quit -> return { ctx; should_quit = true }
   | Line.CommandKind.Help ->
@@ -128,17 +127,17 @@ let run ctx =
     |> of_option ~error:"Failed to take input."
   in
   match%bind Line.parse line |> of_option ~error:"Parse of input failed." with
-  | Line.Expr _ ->
-    Stdio.print_endline "TODO: RE-IMPLEMENT";
-    return { ctx; should_quit = false }
-  | Line.Decl _ ->
-    Stdio.print_endline "TODO: RE-IMPLEMENT";
-    return { ctx; should_quit = false }
+  | Line.Expr expr ->
+    let%map _ = Lang.Rename.rename_expr ctx.rename_ctx expr in
+    { ctx; should_quit = false }
+  | Line.Decl decl ->
+    let%map _, rename_ctx = Lang.Rename.rename_decl ctx.rename_ctx decl in
+    { ctx = { rename_ctx }; should_quit = false }
   | Line.Command cmd -> handle_command ctx cmd
 ;;
 
 let loop () =
-  let ctx = { rename_ctx = _ } in
+  let ctx = { rename_ctx = Lang.Rename.empty () } in
   let rec go ctx =
     match run ctx with
     | Result.Ok { should_quit = true; _ } -> ()
