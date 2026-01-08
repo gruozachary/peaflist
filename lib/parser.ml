@@ -1,7 +1,7 @@
 open! Base
 open Peasec
 open Let_syntax
-open Lang.Raw
+open Lang.Ast.Parsed
 
 let keywords =
   Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td"; "of"; "with" ]
@@ -78,22 +78,22 @@ end = struct
          let%map ps =
            attempt
              (match%map atom () with
-              | Pat.Tuple ps -> ps
+              | Pat.Tuple (ps, ()) -> ps
               | p -> [ p ])
            <|> return []
          in
-         Pat.CtorApp (x, ps))
+         Pat.Constr (x, ps, ()))
       ; atom ()
       ]
 
   and atom () =
     choice
       [ (let%map x = int in
-         Pat.Int x)
+         Pat.Int (x, ()))
       ; (let%map x = Ident.lower in
-         Pat.Ident x)
+         Pat.Ident (x, ()))
       ; (let%map ps = tuple_1 (defer parse) in
-         Pat.Tuple ps)
+         Pat.Tuple (ps, ()))
       ]
   ;;
 end
@@ -110,14 +110,14 @@ end = struct
     let%bind e1 = parse () in
     let%bind _ = keyword "in" in
     let%map e2 = parse () in
-    Expr.Binding (x, e1, e2)
+    Expr.Let (x, e1, e2, ())
 
   and lambda () =
     let%bind _ = attempt (keyword "fun") in
     let%bind x = Ident.lower in
     let%bind _ = symbol "->" in
     let%map e = parse () in
-    Expr.Lambda (x, e)
+    Expr.Lambda (x, e, ())
 
   and matching () =
     let%bind _ = attempt (keyword "match") in
@@ -129,7 +129,7 @@ end = struct
          let%map e' = symbol "->" >*> parse () in
          p, e')
     in
-    Expr.Match (e, es)
+    Expr.Match (e, es, ())
 
   and add () =
     chain_left_1
@@ -137,8 +137,8 @@ end = struct
       (let%map x = symbol "+" <|> symbol "-" in
        fun l r ->
          match x with
-         | "+" -> Expr.BinOp (l, Expr.Bin_op.Plus, r)
-         | "-" -> Expr.BinOp (l, Expr.Bin_op.Sub, r)
+         | "+" -> Expr.BinOp (l, `Plus, r, ())
+         | "-" -> Expr.BinOp (l, `Sub, r, ())
          | _ -> assert false)
 
   and mul () =
@@ -147,14 +147,14 @@ end = struct
       (let%map x = symbol "*" <|> symbol "/" in
        fun l r ->
          match x with
-         | "*" -> Expr.BinOp (l, Expr.Bin_op.Mul, r)
-         | "/" -> Expr.BinOp (l, Expr.Bin_op.Div, r)
+         | "*" -> Expr.BinOp (l, `Mul, r, ())
+         | "/" -> Expr.BinOp (l, `Div, r, ())
          | _ -> assert false)
 
   and apply () =
     let%bind x = simple () in
     let%map xs = many (simple ()) in
-    List.fold ~init:x ~f:(fun f x -> Expr.Apply (f, x)) xs
+    List.fold ~init:x ~f:(fun f x -> Expr.Apply (f, x, ())) xs
 
   and simple () =
     choice
@@ -162,23 +162,23 @@ end = struct
          let%map es =
            attempt
              (match%map atom () with
-              | Expr.Tuple es -> es
+              | Expr.Tuple (es, ()) -> es
               | e -> [ e ])
            <|> return []
          in
-         Expr.Constr (x, es))
+         Expr.Constr (x, es, ()))
       ; atom ()
       ]
 
   and atom () =
     choice
       [ (let%map x = int in
-         Expr.Int x)
+         Expr.Int (x, ()))
       ; (let%map x = Ident.lower in
-         Expr.Id x)
+         Expr.Ident (x, ()))
       ; (match%map tuple_1 (defer parse) with
-         | [ e ] -> Expr.Group e
-         | es -> Expr.Tuple es)
+         | [ e ] -> Expr.Group (e, ())
+         | es -> Expr.Tuple (es, ()))
       ]
   ;;
 end
@@ -192,12 +192,12 @@ end = struct
     chain_right_1
       (ty_prod ())
       (let%map _ = symbol "->" in
-       fun lt rt -> Ty.Fun (lt, rt))
+       fun lt rt -> Ty.Fun (lt, rt, ()))
 
   and ty_prod () =
     match%map sep_by_1 ~sep:(symbol "*") (ty_app ()) with
     | [ x ] -> x
-    | xs -> Ty.Prod xs
+    | xs -> Ty.Prod (xs, ())
 
   and ty_app () =
     let%bind head =
@@ -206,15 +206,15 @@ end = struct
            | [ t ] -> return t
            | ts ->
              let%map x = Ident.lower in
-             Ty.Con (x, ts))
+             Ty.Con (x, ts, ()))
         ; (let%map x = Ident.lower in
-           Ty.Con (x, []))
+           Ty.Con (x, [], ()))
         ; (let%map x = Ident.dash in
-           Ty.Var x)
+           Ty.Var (x, ()))
         ]
     in
     let%map rest = many Ident.lower in
-    List.fold ~init:head ~f:(fun acc t -> Ty.Con (t, [ acc ])) rest
+    List.fold ~init:head ~f:(fun acc t -> Ty.Con (t, [ acc ], ())) rest
   ;;
 end
 
@@ -225,7 +225,7 @@ let val_decl =
   let%bind x = Ident.lower in
   let%bind _ = symbol ":=" in
   let%map e = Expression.parse () in
-  Decl.ValDecl (x, e)
+  Decl.Val (x, e, ())
 ;;
 
 let type_decl =
@@ -242,7 +242,7 @@ let type_decl =
        in
        y, t)
   in
-  Decl.TypeDecl (x, tvs, ts)
+  Decl.Type (x, tvs, ts, ())
 ;;
 
 let prog =

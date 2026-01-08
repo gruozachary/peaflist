@@ -61,7 +61,7 @@ let rec desugar_ty ty =
   | O.Fun (ty, ty', ()) -> Fun (desugar_ty ty, desugar_ty ty', ())
 ;;
 
-let rec desugar_decl ctx decl =
+let desugar_decl ctx decl =
   let module O = Ast.Renamed.Decl in
   let open Ast.Desugared.Decl in
   match decl with
