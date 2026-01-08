@@ -43,6 +43,8 @@ module type Meta = sig
   end
 end
 
+type void = |
+
 module Make (M : Meta) = struct
   module Pat = struct
     type t =
@@ -207,12 +209,12 @@ module Desugared = Make (struct
         type for_ident = unit
         type for_constr = unit
         type for_apply = unit
-        type for_group = |
+        type for_group = void
         type for_lambda = unit
         type for_let = unit
         type for_match = unit
         type for_tuple = unit
-        type for_binop = |
+        type for_binop = void
       end
 
       module Ty = struct
