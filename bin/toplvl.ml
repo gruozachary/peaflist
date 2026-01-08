@@ -6,7 +6,7 @@ module Line : sig
     type t =
       | Quit
       | Help
-      | TypeOf of (string, Lang.Raw.Expr.t) Either.t
+      | TypeOf of Lang.Ast.Parsed.Expr.t
       | TypeInfo of string
 
     type meta =
@@ -20,8 +20,8 @@ module Line : sig
   end
 
   type t =
-    | Expr of Lang.Raw.Expr.t
-    | Decl of Lang.Raw.Decl.t
+    | Expr of Lang.Ast.Parsed.Expr.t
+    | Decl of Lang.Ast.Parsed.Decl.t
     | Command of CommandKind.t
 
   val parse : string -> t Option.t
@@ -30,7 +30,7 @@ end = struct
     type t =
       | Quit
       | Help
-      | TypeOf of (string, Lang.Raw.Expr.t) Either.t
+      | TypeOf of Lang.Ast.Parsed.Expr.t
       | TypeInfo of string
 
     type meta =
@@ -55,10 +55,7 @@ end = struct
       ; { _name = "Value type information"
         ; _description = "Gets the type information about a variable."
         ; cmd = "t"
-        ; parser =
-            (attempt (Parser.Ident.lower <*< eof >>| fun x -> Either.First x)
-             <|> (Parser.expr () >>| fun e -> Either.Second e)
-             >>| fun e -> TypeOf e)
+        ; parser = (Parser.expr () >>| fun e -> TypeOf e)
         }
       ; { _name = "Type definition information"
         ; _description = "Get the information about a type definition."
@@ -77,8 +74,8 @@ end = struct
   end
 
   type t =
-    | Expr of Lang.Raw.Expr.t
-    | Decl of Lang.Raw.Decl.t
+    | Expr of Lang.Ast.Parsed.Expr.t
+    | Decl of Lang.Ast.Parsed.Decl.t
     | Command of CommandKind.t
 
   let parser =
@@ -93,13 +90,18 @@ end = struct
   let parse = Peasec.exec parser
 end
 
-type t = { mutable semantic_ctx : Lang.Analyser_ctx.t }
+type t = { rename_ctx : Lang.Rename.t }
 
-let handle_command toplevel_ctx cmd =
+type run_output =
+  { ctx : t
+  ; should_quit : bool
+  }
+
+let handle_command ctx cmd =
   let open Result in
   let open Result.Let_syntax in
   match cmd with
-  | Line.CommandKind.Quit -> Ok true
+  | Line.CommandKind.Quit -> return { ctx; should_quit = true }
   | Line.CommandKind.Help ->
     List.fold
       Line.CommandKind.metas
@@ -107,28 +109,16 @@ let handle_command toplevel_ctx cmd =
       ~f:(fun acc { _name; _description; cmd; _ } ->
         acc ^ "\n" ^ _name ^ ": " ^ _description ^ " (:" ^ cmd ^ ")")
     |> Stdio.print_endline;
-    Ok false
-  | Line.CommandKind.TypeOf (Either.First ident_str) ->
-    let%map _, scheme =
-      Lang.Analyser_ctx.fetch_and_lookup toplevel_ctx.semantic_ctx ~ident_str
-      |> Result.of_option ~error:"Unbound variable"
-    in
-    Stdio.print_endline (Lang.Scheme.to_string scheme);
-    false
-  | Line.CommandKind.TypeOf (Either.Second e) ->
-    let%map ty, _ = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
-    Stdio.print_endline (Lang.Type.to_string ty);
-    false
-  | Line.CommandKind.TypeInfo ident_str ->
-    let%map _, entry =
-      Lang.Analyser_ctx.type_fetch_and_lookup toplevel_ctx.semantic_ctx ~ident_str
-      |> of_option ~error:"Unbound type identifier"
-    in
-    Stdio.print_endline ("Arity: " ^ Int.to_string entry.arity);
-    false
+    return { ctx; should_quit = false }
+  | Line.CommandKind.TypeOf _ ->
+    Stdio.print_endline "TODO: RE-IMPLEMENT";
+    return { ctx; should_quit = false }
+  | Line.CommandKind.TypeInfo _ ->
+    Stdio.print_endline "TODO: RE-IMPLEMENT";
+    return { ctx; should_quit = false }
 ;;
 
-let run toplevel_ctx =
+let run ctx =
   let open Result in
   let open Result.Let_syntax in
   let%bind line =
@@ -138,26 +128,24 @@ let run toplevel_ctx =
     |> of_option ~error:"Failed to take input."
   in
   match%bind Line.parse line |> of_option ~error:"Parse of input failed." with
-  | Line.Expr e ->
-    let%map _, core = Lang.Raw.Expr.typecheck toplevel_ctx.semantic_ctx e in
-    Stdio.print_endline (Lang.Core.Expr.sexp_of_t core |> Sexp.to_string_hum);
-    false
-  | Line.Decl d ->
-    let%map ctx, _ = Lang.Raw.Decl.typecheck toplevel_ctx.semantic_ctx d in
-    toplevel_ctx.semantic_ctx <- ctx;
-    false
-  | Line.Command cmd -> handle_command toplevel_ctx cmd
+  | Line.Expr _ ->
+    Stdio.print_endline "TODO: RE-IMPLEMENT";
+    return { ctx; should_quit = false }
+  | Line.Decl _ ->
+    Stdio.print_endline "TODO: RE-IMPLEMENT";
+    return { ctx; should_quit = false }
+  | Line.Command cmd -> handle_command ctx cmd
 ;;
 
 let loop () =
-  let toplevel_ctx = { semantic_ctx = Lang.Analyser_ctx.empty () } in
-  let rec go () =
-    match run toplevel_ctx with
-    | Result.Ok true -> ()
-    | Result.Ok false -> go ()
+  let ctx = { rename_ctx = _ } in
+  let rec go ctx =
+    match run ctx with
+    | Result.Ok { should_quit = true; _ } -> ()
+    | Result.Ok { ctx; _ } -> go ctx
     | Result.Error msg ->
       Stdio.print_endline ("Error: " ^ msg);
-      go ()
+      go ctx
   in
-  go ()
+  go ctx
 ;;
