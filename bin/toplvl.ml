@@ -128,10 +128,12 @@ let run ctx =
   in
   match%bind Line.parse line |> of_option ~error:"Parse of input failed." with
   | Line.Expr expr ->
-    let%map _ = Lang.Rename.rename_expr ctx.rename_ctx expr in
+    let%map expr = Lang.Rename.rename_expr ctx.rename_ctx expr in
+    let _ = Lang.Desugar.desugar_expr ctx.rename_ctx expr in
     { ctx; should_quit = false }
   | Line.Decl decl ->
-    let%map _, rename_ctx = Lang.Rename.rename_decl ctx.rename_ctx decl in
+    let%map decl, rename_ctx = Lang.Rename.rename_decl ctx.rename_ctx decl in
+    let _ = Lang.Desugar.desugar_decl ctx.rename_ctx decl in
     { ctx = { rename_ctx }; should_quit = false }
   | Line.Command cmd -> handle_command ctx cmd
 ;;
