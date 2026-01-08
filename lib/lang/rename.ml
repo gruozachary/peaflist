@@ -56,11 +56,11 @@ let empty () =
   }
 ;;
 
-let rec rename_pat ~pat renamer =
+let rec rename_pat ctx pat =
   let open Result in
   let open Let_syntax in
   let open Ast in
-  let spawn () = Renamer.spawn renamer.var_renamer in
+  let spawn () = Renamer.spawn ctx.var_renamer in
   match pat with
   | Parsed.Pat.Int (x, ()) -> return (Renamed.Pat.Int (x, ()), spawn ())
   | Parsed.Pat.Ident (str, ()) ->
@@ -72,28 +72,28 @@ let rec rename_pat ~pat renamer =
         ~init:(return ([], spawn ()))
         ~f:(fun acc pat ->
           let%bind pats, var_renamer = acc in
-          let%map pat, var_renamer' = rename_pat ~pat renamer in
+          let%map pat, var_renamer' = rename_pat ctx pat in
           pat :: pats, Renamer.compose var_renamer var_renamer')
         pats
     in
     Renamed.Pat.Tuple (List.rev pats, ()), var_renamer
   | Parsed.Pat.Constr (str, pats, ()) ->
     let%bind ident =
-      Renamer.fetch renamer.ctor_renamer ~str |> of_option ~error:"Unbound variable"
+      Renamer.fetch ctx.ctor_renamer ~str |> of_option ~error:"Unbound variable"
     in
     let%map pats, var_renamer =
       List.fold
         ~init:(return ([], spawn ()))
         ~f:(fun acc pat ->
           let%bind pats, var_renamer = acc in
-          let%map pat, var_renamer' = rename_pat ~pat renamer in
+          let%map pat, var_renamer' = rename_pat ctx pat in
           pat :: pats, Renamer.compose var_renamer var_renamer')
         pats
     in
     Renamed.Pat.Constr (ident, List.rev pats, ()), var_renamer
 ;;
 
-let rec rename_expr ~expr renamer =
+let rec rename_expr ctx expr =
   let open Result in
   let open Let_syntax in
   let open Ast in
@@ -101,43 +101,41 @@ let rec rename_expr ~expr renamer =
   | Parsed.Expr.Int (n, ()) -> return (Renamed.Expr.Int (n, ()))
   | Parsed.Expr.Ident (str, ()) ->
     let%map ident =
-      Renamer.fetch renamer.var_renamer ~str |> of_option ~error:"Unbound variable"
+      Renamer.fetch ctx.var_renamer ~str |> of_option ~error:"Unbound variable"
     in
     Renamed.Expr.Ident (ident, ())
-  | Parsed.Expr.Constr (str, es, ()) ->
+  | Parsed.Expr.Constr (str, exprs, ()) ->
     let%bind ident =
-      Renamer.fetch renamer.ctor_renamer ~str |> of_option ~error:"Unbound variable"
+      Renamer.fetch ctx.ctor_renamer ~str |> of_option ~error:"Unbound variable"
     in
-    let%map es = List.map ~f:(fun expr -> rename_expr ~expr renamer) es |> all in
+    let%map es = List.map ~f:(rename_expr ctx) exprs |> all in
     Renamed.Expr.Constr (ident, es, ())
   | Parsed.Expr.Apply (expr, expr', ()) ->
-    let%bind expr = rename_expr ~expr renamer in
-    let%map expr' = rename_expr ~expr:expr' renamer in
+    let%bind expr = rename_expr ctx expr in
+    let%map expr' = rename_expr ctx expr' in
     Renamed.Expr.Apply (expr, expr', ())
   | Parsed.Expr.Group (expr, ()) ->
-    let%map expr = rename_expr ~expr renamer in
+    let%map expr = rename_expr ctx expr in
     Renamed.Expr.Group (expr, ())
   | Parsed.Expr.Lambda (str, expr, ()) ->
-    let ident, var_renamer = Renamer.fresh_add ~str renamer.var_renamer in
-    let%map expr = rename_expr ~expr { renamer with var_renamer } in
+    let ident, var_renamer = Renamer.fresh_add ~str ctx.var_renamer in
+    let%map expr = rename_expr { ctx with var_renamer } expr in
     Renamed.Expr.Lambda (ident, expr, ())
   | Parsed.Expr.Let (str, expr_binding, expr_body, ()) ->
-    let ident, var_renamer = Renamer.fresh_add ~str renamer.var_renamer in
-    let%bind expr_binding = rename_expr ~expr:expr_binding renamer in
-    let%map expr_body = rename_expr ~expr:expr_body { renamer with var_renamer } in
+    let ident, var_renamer = Renamer.fresh_add ~str ctx.var_renamer in
+    let%bind expr_binding = rename_expr ctx expr_binding in
+    let%map expr_body = rename_expr { ctx with var_renamer } expr_body in
     Renamed.Expr.Let (ident, expr_binding, expr_body, ())
   | Parsed.Expr.Match (expr_scrutinee, arms, ()) ->
-    let%bind expr_scrutinee = rename_expr ~expr:expr_scrutinee renamer in
+    let%bind expr_scrutinee = rename_expr ctx expr_scrutinee in
     let%map arms =
       List.map
         ~f:(fun (pat, expr) ->
-          let%bind pat, var_renamer = rename_pat ~pat renamer in
+          let%bind pat, var_renamer = rename_pat ctx pat in
           let%map expr =
             rename_expr
-              ~expr
-              { renamer with
-                var_renamer = Renamer.compose renamer.var_renamer var_renamer
-              }
+              { ctx with var_renamer = Renamer.compose ctx.var_renamer var_renamer }
+              expr
           in
           pat, expr)
         arms
@@ -145,15 +143,15 @@ let rec rename_expr ~expr renamer =
     in
     Renamed.Expr.Match (expr_scrutinee, arms, ())
   | Parsed.Expr.Tuple (exprs, ()) ->
-    let%map exprs = List.map ~f:(fun expr -> rename_expr ~expr renamer) exprs |> all in
+    let%map exprs = List.map ~f:(rename_expr ctx) exprs |> all in
     Renamed.Expr.Tuple (exprs, ())
   | Parsed.Expr.BinOp (expr_left, op, expr_right, ()) ->
-    let%bind expr_left = rename_expr ~expr:expr_left renamer in
-    let%map expr_right = rename_expr ~expr:expr_right renamer in
+    let%bind expr_left = rename_expr ctx expr_left in
+    let%map expr_right = rename_expr ctx expr_right in
     Renamed.Expr.BinOp (expr_left, op, expr_right, ())
 ;;
 
-let rec rename_ty ~ty renamer tvar_map =
+let rec rename_ty ctx tvar_map ty =
   let open Result in
   let open Let_syntax in
   let open Ast in
@@ -164,31 +162,30 @@ let rec rename_ty ~ty renamer tvar_map =
      | None -> raise_s [%message "Internal compiler error: tvar not found when renaming"])
   | Parsed.Ty.Con (str, tys, ()) ->
     let%bind ident =
-      Renamer.fetch ~str renamer.type_renamer
-      |> of_option ~error:"Unbound type identifier"
+      Renamer.fetch ~str ctx.type_renamer |> of_option ~error:"Unbound type identifier"
     in
-    let%map tys = List.map ~f:(fun ty -> rename_ty ~ty renamer tvar_map) tys |> all in
+    let%map tys = List.map ~f:(rename_ty ctx tvar_map) tys |> all in
     Renamed.Ty.Con (ident, tys, ())
   | Parsed.Ty.Prod (tys, ()) ->
-    let%map tys = List.map ~f:(fun ty -> rename_ty ~ty renamer tvar_map) tys |> all in
+    let%map tys = List.map ~f:(rename_ty ctx tvar_map) tys |> all in
     Renamed.Ty.Prod (tys, ())
   | Parsed.Ty.Fun (ty, ty', ()) ->
-    let%bind ty = rename_ty ~ty renamer tvar_map in
-    let%map ty' = rename_ty ~ty:ty' renamer tvar_map in
+    let%bind ty = rename_ty ctx tvar_map ty in
+    let%map ty' = rename_ty ctx tvar_map ty' in
     Renamed.Ty.Fun (ty, ty', ())
 ;;
 
-let rename_decl ~decl renamer =
+let rename_decl ctx decl =
   let open Result in
   let open Let_syntax in
   let open Ast in
   match decl with
   | Parsed.Decl.Val (str, expr, ()) ->
-    let%map expr = rename_expr ~expr renamer in
-    let ident, var_renamer = Renamer.fresh_add ~str renamer.var_renamer in
-    Renamed.Decl.Val (ident, expr, ()), { renamer with var_renamer }
+    let%map expr = rename_expr ctx expr in
+    let ident, var_renamer = Renamer.fresh_add ~str ctx.var_renamer in
+    Renamed.Decl.Val (ident, expr, ()), { ctx with var_renamer }
   | Parsed.Decl.Type (str, tvars, ctors, ()) ->
-    let ident, type_renamer = Renamer.fresh_add ~str renamer.type_renamer in
+    let ident, type_renamer = Renamer.fresh_add ~str ctx.type_renamer in
     let%bind tvar_map, _ =
       List.fold
         ~init:(Some (Map.empty (module String), 0))
@@ -203,12 +200,12 @@ let rename_decl ~decl renamer =
     in
     let%map ctors, ctor_renamer =
       List.fold
-        ~init:(return ([], renamer.ctor_renamer))
+        ~init:(return ([], ctx.ctor_renamer))
         ~f:(fun acc (str, ty) ->
           let%bind ctors, ctor_renamer = acc in
           match ty with
           | Some ty ->
-            let%map ty = rename_ty ~ty renamer tvar_map in
+            let%map ty = rename_ty ctx tvar_map ty in
             let ident, ctor_renamer = Renamer.fresh_add ~str ctor_renamer in
             (ident, Some ty) :: ctors, ctor_renamer
           | None ->
@@ -217,17 +214,17 @@ let rename_decl ~decl renamer =
         ctors
     in
     ( Renamed.Decl.Type (ident, List.map tvars ~f:(Map.find_exn tvar_map), ctors, ())
-    , { renamer with type_renamer; ctor_renamer } )
+    , { ctx with type_renamer; ctor_renamer } )
 ;;
 
-let rename_prog ~prog renamer =
+let rename_prog ctx prog =
   let open Result in
   let open Let_syntax in
   List.fold
-    ~init:(return ([], renamer))
+    ~init:(return ([], ctx))
     ~f:(fun acc decl ->
-      let%bind decls, renamer = acc in
-      let%map decl, renamer = rename_decl ~decl renamer in
+      let%bind decls, ctx = acc in
+      let%map decl, renamer = rename_decl ctx decl in
       decl :: decls, renamer)
     prog
 ;;
