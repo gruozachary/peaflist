@@ -10,8 +10,8 @@ let bin_op_fun = function
 ;;
 
 let rec desugar_pat pat =
-  let module O = Ast.Renamed.Pat in
-  let open Ast.Desugared.Pat in
+  let module O = Renamed_ast.Pat in
+  let open Desugared_ast.Pat in
   match pat with
   | O.Constr (ident, pats, ()) -> Constr (ident, List.map ~f:desugar_pat pats, ())
   | O.Ident (ident, ()) -> Ident (ident, ())
@@ -20,8 +20,8 @@ let rec desugar_pat pat =
 ;;
 
 let rec desugar_expr (rename_ctx : Rename.t) expr =
-  let module O = Ast.Renamed.Expr in
-  let open Ast.Desugared.Expr in
+  let module O = Renamed_ast.Expr in
+  let open Desugared_ast.Expr in
   match expr with
   | O.Int (x, ()) -> Int (x, ())
   | O.Ident (ident, ()) -> Ident (ident, ())
@@ -56,8 +56,8 @@ let rec desugar_expr (rename_ctx : Rename.t) expr =
 ;;
 
 let rec desugar_ty ty =
-  let module O = Ast.Renamed.Ty in
-  let open Ast.Desugared.Ty in
+  let module O = Renamed_ast.Ty in
+  let open Desugared_ast.Ty in
   match ty with
   | O.Var (x, ()) -> Var (x, ())
   | O.Con (ident, tys, ()) -> Con (ident, List.map ~f:desugar_ty tys, ())
@@ -66,8 +66,8 @@ let rec desugar_ty ty =
 ;;
 
 let desugar_decl rename_ctx decl =
-  let module O = Ast.Renamed.Decl in
-  let open Ast.Desugared.Decl in
+  let module O = Renamed_ast.Decl in
+  let open Desugared_ast.Decl in
   match decl with
   | O.Val (ident, expr, ()) -> Val (ident, desugar_expr rename_ctx expr, ())
   | O.Type (ident, tvars, ctors, ()) ->

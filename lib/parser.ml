@@ -1,7 +1,7 @@
 open! Base
 open Peasec
 open Let_syntax
-open Lang.Ast.Parsed
+open Lang.Parsed_ast
 
 let keywords =
   Set.of_list (module String) [ "fun"; "let"; "in"; "vd"; "td"; "of"; "with" ]

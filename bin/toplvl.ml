@@ -6,7 +6,7 @@ module Line : sig
     type t =
       | Quit
       | Help
-      | TypeOf of Lang.Ast.Parsed.Expr.t
+      | TypeOf of Lang.Parsed_ast.Expr.t
       | TypeInfo of string
 
     type meta =
@@ -20,8 +20,8 @@ module Line : sig
   end
 
   type t =
-    | Expr of Lang.Ast.Parsed.Expr.t
-    | Decl of Lang.Ast.Parsed.Decl.t
+    | Expr of Lang.Parsed_ast.Expr.t
+    | Decl of Lang.Parsed_ast.Decl.t
     | Command of CommandKind.t
 
   val parse : string -> t Option.t
@@ -30,7 +30,7 @@ end = struct
     type t =
       | Quit
       | Help
-      | TypeOf of Lang.Ast.Parsed.Expr.t
+      | TypeOf of Lang.Parsed_ast.Expr.t
       | TypeInfo of string
 
     type meta =
@@ -74,8 +74,8 @@ end = struct
   end
 
   type t =
-    | Expr of Lang.Ast.Parsed.Expr.t
-    | Decl of Lang.Ast.Parsed.Decl.t
+    | Expr of Lang.Parsed_ast.Expr.t
+    | Decl of Lang.Parsed_ast.Decl.t
     | Command of CommandKind.t
 
   let parser =
