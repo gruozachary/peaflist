@@ -119,4 +119,6 @@ let equal_decl decl decl' =
   | _ -> false
 ;;
 
-let equal_prog (Prog.Decls (decls, _)) (Prog.Decls (decls', _)) = Ast.equal_pairs equal_decl decls decls'
+let equal_prog (Prog.Decls (decls, _)) (Prog.Decls (decls', _)) =
+  Ast.equal_pairs equal_decl decls decls'
+;;

@@ -246,8 +246,11 @@ let type_decl =
 ;;
 
 let prog =
-  let%map decls = fully
-    (let%bind vd = many (val_decl <|> type_decl) in
-     let%map _ = spaces in
-     vd) in Prog.Decls (decls, ())
+  let%map decls =
+    fully
+      (let%bind vd = many (val_decl <|> type_decl) in
+       let%map _ = spaces in
+       vd)
+  in
+  Prog.Decls (decls, ())
 ;;
