@@ -1,3 +1,5 @@
+open! Base
+
 type void = |
 
 module type META = sig
@@ -96,6 +98,12 @@ module Make (M : META) = struct
   end
 
   module Prog = struct
-    type t = Decl.t list * M.Ext.Prog.for_prog
+    type t = Decls of Decl.t list * M.Ext.Prog.for_prog
   end
 end
+
+let equal_pairs equal xs ys =
+  match List.fold2 ~init:true ~f:(fun acc x y -> acc && equal x y) xs ys with
+  | List.Or_unequal_lengths.Ok b -> b
+  | List.Or_unequal_lengths.Unequal_lengths -> false
+;;

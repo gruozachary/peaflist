@@ -66,5 +66,5 @@ val val_decl : Lang.Parsed_ast.Decl.t Peasec.t
 val type_decl : Lang.Parsed_ast.Decl.t Peasec.t
 (* A peasec parser that parses a type decl*)
 
-val prog : Lang.Parsed_ast.Decl.t list Peasec.t
+val prog : Lang.Parsed_ast.Prog.t Peasec.t
 (* A peasec parser that parses a Peaflist program  *)
