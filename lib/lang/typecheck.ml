@@ -2,28 +2,48 @@ open! Base
 open Result
 open Let_syntax
 
-type gen_var = GenVar of int
-type uni_var = UniVar of int
+module Make_var () : sig
+  type t
+
+  val zero : t
+  val succ : t -> t
+
+  include Comparable.S with type t := t
+end = struct
+  module T = struct
+    type t = int [@@deriving compare, sexp_of]
+
+    let zero = 0
+    let succ x = x + 1
+  end
+
+  include T
+  include Comparable.Make (T)
+end
+
+module Gen_var = Make_var ()
+module Uni_var = Make_var ()
 
 type ty =
   | TUni of tu ref
-  | TGen of gen_var
+  | TGen of Gen_var.t
   | TFun of ty * ty
   | TProd of ty list
   | TCon of Type_ident.t * ty list
 
 and tu =
-  | Unbound of uni_var
+  | Unbound of Uni_var.t
   | Link of ty
 
-type scheme = Forall of gen_var list * ty
+type scheme = Forall of Gen_var.t list * ty
 
 let rec prune = function
-  | TUni ({contents = Link ty } as tu_ref) ->
+  | TUni ({ contents = Link ty } as tu_ref) ->
     let root = prune ty in
     tu_ref := Link root;
     root
   | ty -> ty
+;;
 
 let rec unify ty1 ty2 =
   let unify_lists tys tys' =
@@ -44,6 +64,6 @@ let rec unify ty1 ty2 =
   | TProd tys, TProd tys' -> unify_lists tys tys'
   | TCon (ident, tys), TCon (ident', tys') when Type_ident.equal ident ident' ->
     unify_lists tys tys'
-  | TGen (GenVar x), TGen (GenVar y) when equal_int x y -> return ()
+  | TGen gen_var, TGen gen_var' when Gen_var.equal gen_var gen_var' -> return ()
   | _ -> fail "Type unification failed"
 ;;
