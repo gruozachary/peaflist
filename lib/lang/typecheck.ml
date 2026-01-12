@@ -68,10 +68,42 @@ let rec unify ty1 ty2 =
   | _ -> fail "Type unification failed"
 ;;
 
+type tenv_entry =
+  { arity : int
+  ; ctors : Constr_ident.t list
+  }
+
+type cenv_entry =
+  { parent : Type_ident.t
+  ; tag : int
+  ; arg_scheme_opt : scheme option
+  ; res_schme : scheme
+  }
+
 type ctx =
   { mutable next_gen_var : Gen_var.t
   ; mutable next_uni_var : Uni_var.t
+  ; env : (Var_ident.t, scheme, Var_ident.comparator_witness) Map.t
+  ; tenv : (Type_ident.t, tenv_entry, Type_ident.comparator_witness) Map.t
+  ; cenv : (Constr_ident.t, cenv_entry, Type_ident.comparator_witness) Map.t
   }
+
+let rec free_in_ty ty =
+  match ty with
+  | TUni { contents = Unbound uni_var } -> Set.singleton (module Uni_var) uni_var
+  | TUni { contents = Link _ } -> free_in_ty (prune ty)
+  | TGen _ -> Set.empty (module Uni_var)
+  | TFun (ty_fun, ty_arg) -> Set.union (free_in_ty ty_fun) (free_in_ty ty_arg)
+  | TProd tys -> List.map tys ~f:free_in_ty |> Set.union_list (module Uni_var)
+  | TCon (_, tys) -> List.map tys ~f:free_in_ty |> Set.union_list (module Uni_var)
+  | _ -> .
+;;
+
+let free_in_env =
+  Map.fold
+    ~init:(Set.empty (module Uni_var))
+    ~f:(fun ~key:_ ~data:(Forall (_, ty)) acc -> Set.union acc (free_in_ty ty))
+;;
 
 let fresh_gen_var ctx =
   let x = ctx.next_gen_var in
@@ -96,6 +128,28 @@ let instantiate ctx (Forall (gen_vars, ty)) =
     | TUni _ as ty -> ty
     | TGen gen_var as ty ->
       Map.find map gen_var |> Option.map ~f:create_tu_ref |> Option.value ~default:ty
+    | TFun (ty_fun, ty_arg) -> TFun (replace ty_fun, replace ty_arg)
+    | TProd tys -> TProd (List.map ~f:replace tys)
+    | TCon (ident, tys) -> TCon (ident, List.map ~f:replace tys)
+  in
+  replace ty
+;;
+
+let generalise ctx ty =
+  let free_uni_vars = Set.diff (free_in_ty ty) (free_in_env ctx.env) in
+  let map =
+    Set.fold
+      ~init:(Map.empty (module Uni_var))
+      ~f:(fun acc uni_var -> Map.set acc ~key:uni_var ~data:(fresh_gen_var ctx))
+      free_uni_vars
+  in
+  let rec replace = function
+    | TUni { contents = Unbound uni_var } as ty ->
+      Map.find map uni_var
+      |> Option.map ~f:(fun gen_var -> TGen gen_var)
+      |> Option.value ~default:ty
+    | TUni { contents = Link _ } as ty -> replace (prune ty)
+    | TGen _ as ty -> ty
     | TFun (ty_fun, ty_arg) -> TFun (replace ty_fun, replace ty_arg)
     | TProd tys -> TProd (List.map ~f:replace tys)
     | TCon (ident, tys) -> TCon (ident, List.map ~f:replace tys)
