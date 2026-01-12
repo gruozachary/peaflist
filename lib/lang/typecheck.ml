@@ -67,3 +67,38 @@ let rec unify ty1 ty2 =
   | TGen gen_var, TGen gen_var' when Gen_var.equal gen_var gen_var' -> return ()
   | _ -> fail "Type unification failed"
 ;;
+
+type ctx =
+  { mutable next_gen_var : Gen_var.t
+  ; mutable next_uni_var : Uni_var.t
+  }
+
+let fresh_gen_var ctx =
+  let x = ctx.next_gen_var in
+  ctx.next_gen_var <- Gen_var.succ x;
+  x
+;;
+
+let fresh_uni_var ctx =
+  let x = ctx.next_uni_var in
+  ctx.next_uni_var <- Uni_var.succ x;
+  x
+;;
+
+let create_tu_ref uni_var = TUni (Ref.create (Unbound uni_var))
+
+let instantiate ctx (Forall (gen_vars, ty)) =
+  let map =
+    List.map ~f:(fun gen_var -> gen_var, fresh_uni_var ctx) gen_vars
+    |> Map.of_alist_exn (module Gen_var)
+  in
+  let rec replace = function
+    | TUni _ as ty -> ty
+    | TGen gen_var as ty ->
+      Map.find map gen_var |> Option.map ~f:create_tu_ref |> Option.value ~default:ty
+    | TFun (ty_fun, ty_arg) -> TFun (replace ty_fun, replace ty_arg)
+    | TProd tys -> TProd (List.map ~f:replace tys)
+    | TCon (ident, tys) -> TCon (ident, List.map ~f:replace tys)
+  in
+  replace ty
+;;
