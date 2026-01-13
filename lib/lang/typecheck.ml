@@ -159,7 +159,9 @@ let instantiate_multi ctx gen_vars tys =
   List.map ~f:replace tys
 ;;
 
-let instantiate ctx (Forall (gen_vars, ty)) = instantiate_multi ctx gen_vars [ ty ]
+let instantiate ctx (Forall (gen_vars, ty)) =
+  instantiate_multi ctx gen_vars [ ty ] |> List.hd_exn
+;;
 
 let generalise ctx ty =
   let free_uni_vars = Set.diff (free_in_ty ty) (free_in_env ctx.env) in
@@ -180,7 +182,7 @@ let generalise ctx ty =
     | TProd tys -> TProd (List.map ~f:replace tys)
     | TCon (ident, tys) -> TCon (ident, List.map ~f:replace tys)
   in
-  replace ty
+  Forall (Map.data map, replace ty)
 ;;
 
 include Ast.Make (struct
@@ -269,7 +271,7 @@ module Pat = struct
     | O.Int (x, ()) -> return (Int (x, ()), Map.empty (module Var_ident))
     | O.Ident (ident, ()) ->
       let ty = fresh_tu_ref ctx in
-      return (Ident (ident, ty), Map.singleton (module Var_ident) ident ty)
+      return (Ident (ident, ty), Map.singleton (module Var_ident) ident (Forall ([], ty)))
     | O.Tuple (pats, ()) ->
       let%map pats, env = infer_list pats in
       Tuple (pats, TProd (List.map ~f:(ty_of rename) pats)), env
@@ -292,5 +294,114 @@ module Pat = struct
           unify ty ty')
       in
       Constr (ident, pats_inf, res_ty), env_inf
+  ;;
+end
+
+module Expr = struct
+  include Expr
+
+  let rec ty_of (rename : Rename.t) (expr : t) =
+    match expr with
+    | Int (_, ()) -> nullary_type_of_str rename "int"
+    | Ident (_, ty) -> ty
+    | Constr (_, _, ty) -> ty
+    | Apply (_, _, ty) -> ty
+    | Lambda (_, expr_body, _) -> ty_of rename expr_body
+    | Let (_, _, expr_body, _) -> ty_of rename expr_body
+    | Match (_, _, ty) -> ty
+    | Tuple (_, ty) -> ty
+    | _ -> .
+  ;;
+
+  let rec infer (ctx : ctx) (rename : Rename.t) (expr : Desugared_ast.Expr.t) =
+    let module O = Desugared_ast.Expr in
+    let overwrite_merge map map' =
+      Map.merge map map' ~f:(fun ~key:_ -> function
+        | `Right y -> Some y
+        | `Left x -> Some x
+        | `Both (_, y) -> Some y)
+    in
+    let infer_list exprs =
+      let%map exprs =
+        List.fold
+          ~init:(return [])
+          ~f:(fun acc expr ->
+            let%bind exprs_acc = acc in
+            let%map expr_inf = infer ctx rename expr in
+            expr_inf :: exprs_acc)
+          exprs
+      in
+      List.rev exprs
+    in
+    match expr with
+    | O.Int (x, ()) -> return (Int (x, ()))
+    | O.Ident (ident, ()) ->
+      let ty = term_fetch ctx ident |> instantiate ctx in
+      return (Ident (ident, ty))
+    | O.Constr (ident, exprs, ()) ->
+      let entry = ctor_fetch ctx ident in
+      let arg_tys, res_ty =
+        match instantiate_multi ctx entry.gen_vars (entry.res_gen :: entry.arg_gens) with
+        | res_ty :: arg_tys -> arg_tys, res_ty
+        | _ -> assert false
+      in
+      let%bind exprs_inf = infer_list exprs in
+      let%bind zipped =
+        match List.zip arg_tys (List.map ~f:(ty_of rename) exprs_inf) with
+        | List.Or_unequal_lengths.Ok zipped -> return zipped
+        | List.Or_unequal_lengths.Unequal_lengths -> fail "Arity for constructor wrong"
+      in
+      let%map () =
+        List.fold zipped ~init:(return ()) ~f:(fun acc (ty, ty') ->
+          let%bind () = acc in
+          unify ty ty')
+      in
+      Constr (ident, exprs_inf, res_ty)
+    | O.Apply (expr_fun, expr_arg, ()) ->
+      let%bind expr_fun = infer ctx rename expr_fun in
+      let%bind expr_arg = infer ctx rename expr_arg in
+      let ty_fun = ty_of rename expr_fun in
+      let ty_arg = ty_of rename expr_arg in
+      let ty_res = fresh_tu_ref ctx in
+      let%map () = unify ty_fun (TFun (ty_arg, ty_res)) in
+      Apply (expr_fun, expr_arg, ty_res)
+    | O.Lambda (ident, expr_body, ()) ->
+      let ty_arg = fresh_tu_ref ctx in
+      let scheme_arg = Forall ([], ty_arg) in
+      let%map expr_body =
+        infer
+          { ctx with env = Map.set ctx.env ~key:ident ~data:scheme_arg }
+          rename
+          expr_body
+      in
+      Lambda (ident, expr_body, ty_arg)
+    | O.Let (ident, expr_binding, expr_body, ()) ->
+      let%bind expr_binding = infer ctx rename expr_binding in
+      let scheme_binding = generalise ctx (ty_of rename expr_binding) in
+      let%map expr_body =
+        infer
+          { ctx with env = Map.set ctx.env ~key:ident ~data:scheme_binding }
+          rename
+          expr_body
+      in
+      Let (ident, expr_binding, expr_body, scheme_binding)
+    | O.Match (expr_scrutinee, arms, ()) ->
+      let%bind expr_scrutinee = infer ctx rename expr_scrutinee in
+      let ty = fresh_tu_ref ctx in
+      let%map arms =
+        List.fold arms ~init:(return []) ~f:(fun acc (pat, expr) ->
+          let%bind arms_acc = acc in
+          let%bind pat, env_inf = Pat.infer ctx rename pat in
+          let%bind expr =
+            infer { ctx with env = overwrite_merge ctx.env env_inf } rename expr
+          in
+          let%map () = unify ty (ty_of rename expr) in
+          (pat, expr) :: arms_acc)
+      in
+      Match (expr_scrutinee, List.rev arms, ty)
+    | O.Tuple (exprs, ()) ->
+      let%map exprs = infer_list exprs in
+      Tuple (exprs, TProd (List.map ~f:(ty_of rename) exprs))
+    | _ -> .
   ;;
 end
