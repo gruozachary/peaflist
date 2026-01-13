@@ -494,3 +494,25 @@ module Decl = struct
       Type (ident, gen_vars, List.rev ctors, ()), ctx
   ;;
 end
+
+module Prog = struct
+  include Prog
+
+  let infer
+        (ctx : ctx)
+        (rename : Rename.t)
+        (Desugared_ast.Prog.Decls (decls, ()) : Desugared_ast.Prog.t)
+    =
+    let module O = Desugared_ast.Prog in
+    let%map decls, ctx =
+      List.fold
+        decls
+        ~init:(return ([], ctx))
+        ~f:(fun acc decl ->
+          let%bind decls_acc, ctx = acc in
+          let%map decl, ctx = Decl.infer ctx rename decl in
+          decl :: decls_acc, ctx)
+    in
+    Decls (List.rev decls, ()), ctx
+  ;;
+end
