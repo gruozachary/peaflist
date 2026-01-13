@@ -405,3 +405,38 @@ module Expr = struct
     | _ -> .
   ;;
 end
+
+module Ty = struct
+  include Ty
+
+  let ty_of = function
+    | Var (_, ty) -> ty
+    | Con (_, _, ty) -> ty
+    | Prod (_, ty) -> ty
+    | Fun (_, _, ty) -> ty
+  ;;
+
+  let rec infer
+            (tvar_map : (int, Gen_var.t, Int.comparator_witness) Map.t)
+            (ty : Desugared_ast.Ty.t)
+    =
+    let module O = Desugared_ast.Ty in
+    match ty with
+    | O.Var (x, _) ->
+      (match Map.find tvar_map x with
+       | Some gen_var -> Var (x, TGen gen_var)
+       | None ->
+         raise_s
+           [%message "Internal compiler error: Mapping from int to gen var doesn't exist"])
+    | O.Con (ident, tys, ()) ->
+      let tys = List.map tys ~f:(infer tvar_map) in
+      Con (ident, tys, TCon (ident, List.map ~f:ty_of tys))
+    | O.Prod (tys, ()) ->
+      let tys = List.map tys ~f:(infer tvar_map) in
+      Prod (tys, TProd (List.map ~f:ty_of tys))
+    | O.Fun (ty_fun, ty_arg, ()) ->
+      let ty_fun = infer tvar_map ty_fun in
+      let ty_arg = infer tvar_map ty_arg in
+      Fun (ty_fun, ty_arg, TFun (ty_of ty_fun, ty_of ty_arg))
+  ;;
+end
