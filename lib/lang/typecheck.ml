@@ -189,7 +189,7 @@ include Ast.Make (struct
     type var_ident = Var_ident.t
     type ctor_ident = Constr_ident.t
     type type_ident = Type_ident.t
-    type tvar = int
+    type tvar = Gen_var.t
 
     module Ext = struct
       module Pat = struct
@@ -220,7 +220,7 @@ include Ast.Make (struct
       end
 
       module Decl = struct
-        type for_val = unit
+        type for_val = scheme
         type for_type = unit
       end
 
@@ -424,7 +424,7 @@ module Ty = struct
     match ty with
     | O.Var (x, _) ->
       (match Map.find tvar_map x with
-       | Some gen_var -> Var (x, TGen gen_var)
+       | Some gen_var -> Var (gen_var, TGen gen_var)
        | None ->
          raise_s
            [%message "Internal compiler error: Mapping from int to gen var doesn't exist"])
@@ -438,5 +438,59 @@ module Ty = struct
       let ty_fun = infer tvar_map ty_fun in
       let ty_arg = infer tvar_map ty_arg in
       Fun (ty_fun, ty_arg, TFun (ty_of ty_fun, ty_of ty_arg))
+  ;;
+end
+
+module Decl = struct
+  include Decl
+
+  let infer (ctx : ctx) (rename : Rename.t) (decl : Desugared_ast.Decl.t) =
+    let module O = Desugared_ast.Decl in
+    let flat_ty_of_opt_ty ty_opt =
+      match Option.map ~f:Ty.ty_of ty_opt with
+      | Some (TProd tys) -> tys
+      | Some ty -> [ ty ]
+      | _ -> []
+    in
+    match decl with
+    | O.Val (ident, expr, ()) ->
+      let%map expr = Expr.infer ctx rename expr in
+      let scheme = Expr.ty_of rename expr |> generalise ctx in
+      ( Val (ident, expr, scheme)
+      , { ctx with env = Map.set ctx.env ~key:ident ~data:scheme } )
+    | O.Type (ident, tvars, ctors, ()) ->
+      let tenv =
+        Map.set ctx.tenv ~key:ident ~data:{ arity = List.length tvars; ctors = [] }
+      in
+      let tvar_map =
+        List.map tvars ~f:(fun tvar -> tvar, fresh_gen_var ctx)
+        |> Map.of_alist_exn (module Int)
+      in
+      let gen_vars = Map.data tvar_map in
+      let res_gen = TCon (ident, List.map ~f:(fun gen_var -> TGen gen_var) gen_vars) in
+      let%map _, ctors, ctx =
+        List.fold
+          ctors
+          ~init:(return (0, [], { ctx with tenv }))
+          ~f:(fun acc (ident_ctor, ty_ctor) ->
+            let%map i, ctors, ctx = acc in
+            let ty_ctor = Option.map ~f:(Ty.infer tvar_map) ty_ctor in
+            ( i + 1
+            , (ident_ctor, ty_ctor) :: ctors
+            , { ctx with
+                cenv =
+                  Map.set
+                    ctx.cenv
+                    ~key:ident_ctor
+                    ~data:
+                      { parent = ident
+                      ; tag = i
+                      ; gen_vars
+                      ; arg_gens = flat_ty_of_opt_ty ty_ctor
+                      ; res_gen
+                      }
+              } ))
+      in
+      Type (ident, gen_vars, List.rev ctors, ()), ctx
   ;;
 end
