@@ -1,7 +1,6 @@
 open! Base
 open Result
 open Let_syntax
-
 module Gen_var = Typing.Gen_var
 module Uni_var = Typing.Make_var ()
 
@@ -47,6 +46,21 @@ let rec unify ty1 ty2 =
     unify_lists tys tys'
   | TGen gen_var, TGen gen_var' when Gen_var.equal gen_var gen_var' -> return ()
   | _ -> fail "Type unification failed"
+;;
+
+let rec type_of_ty (ty : ty) =
+  match prune ty with
+  | TUni { contents = Link ty } -> type_of_ty ty
+  | TUni { contents = Unbound _ } ->
+    raise_s [%message "Internal compiler error: Attempt to convert ununified type"]
+  | TGen gen_var -> Typing.Type.Gen gen_var
+  | TFun (ty_arg, ty_res) -> Typing.Type.Fun (type_of_ty ty_arg, type_of_ty ty_res)
+  | TProd tys -> Typing.Type.Prod (List.map ~f:type_of_ty tys)
+  | TCon (ident, tys) -> Typing.Type.Con (ident, List.map ~f:type_of_ty tys)
+;;
+
+let scheme_of_scheme (Forall (gen_vars, ty)) =
+  Typing.Scheme.Forall (gen_vars, type_of_ty ty)
 ;;
 
 type tenv_entry =
@@ -276,6 +290,15 @@ module Pat = struct
       in
       Constr (ident, pats_inf, res_ty), env_inf
   ;;
+
+  let rec to_core (pat : t) =
+    let module N = Core_ast.Pat in
+    match pat with
+    | Int (x, ()) -> N.Int (x, ())
+    | Ident (ident, ty) -> N.Ident (ident, type_of_ty ty)
+    | Tuple (pats, ty) -> N.Tuple (List.map ~f:to_core pats, type_of_ty ty)
+    | Constr (ident, pats, ty) -> N.Constr (ident, List.map ~f:to_core pats, type_of_ty ty)
+  ;;
 end
 
 module Expr = struct
@@ -385,6 +408,27 @@ module Expr = struct
       Tuple (exprs, TProd (List.map ~f:(ty_of rename) exprs))
     | _ -> .
   ;;
+
+  let rec to_core (expr : t) =
+    let module N = Core_ast.Expr in
+    match expr with
+    | Int (x, ()) -> N.Int (x, ())
+    | Ident (ident, ty) -> N.Ident (ident, type_of_ty ty)
+    | Constr (ident, exprs, ty) ->
+      N.Constr (ident, List.map ~f:to_core exprs, type_of_ty ty)
+    | Apply (expr_fun, expr_arg, ty) ->
+      N.Apply (to_core expr_fun, to_core expr_arg, type_of_ty ty)
+    | Lambda (ident, expr_body, ty) -> N.Lambda (ident, to_core expr_body, type_of_ty ty)
+    | Let (ident, expr_binding, expr_body, scheme) ->
+      N.Let (ident, to_core expr_binding, to_core expr_body, scheme_of_scheme scheme)
+    | Match (expr_scrutinee, arms, ty) ->
+      N.Match
+        ( to_core expr_scrutinee
+        , List.map arms ~f:(fun (pat, expr) -> Pat.to_core pat, to_core expr)
+        , type_of_ty ty )
+    | Tuple (exprs, ty) -> N.Tuple (List.map ~f:to_core exprs, type_of_ty ty)
+    | _ -> .
+  ;;
 end
 
 module Ty = struct
@@ -419,6 +463,15 @@ module Ty = struct
       let ty_fun = infer tvar_map ty_fun in
       let ty_arg = infer tvar_map ty_arg in
       Fun (ty_fun, ty_arg, TFun (ty_of ty_fun, ty_of ty_arg))
+  ;;
+
+  let rec to_core (ty : t) =
+    let module N = Core_ast.Ty in
+    match ty with
+    | Var (gen_var, ty) -> N.Var (gen_var, type_of_ty ty)
+    | Con (ident, tys, ty) -> N.Con (ident, List.map ~f:to_core tys, type_of_ty ty)
+    | Prod (tys, ty) -> N.Prod (List.map ~f:to_core tys, type_of_ty ty)
+    | Fun (ty_arg, ty_res, ty) -> N.Fun (to_core ty_arg, to_core ty_res, type_of_ty ty)
   ;;
 end
 
@@ -474,6 +527,20 @@ module Decl = struct
       in
       Type (ident, gen_vars, List.rev ctors, ()), ctx
   ;;
+
+  let to_core (decl : t) =
+    let module N = Core_ast.Decl in
+    match decl with
+    | Val (ident, expr, scheme) ->
+      N.Val (ident, Expr.to_core expr, scheme_of_scheme scheme)
+    | Type (ident, tvars, ctors, ()) ->
+      N.Type
+        ( ident
+        , tvars
+        , List.map ctors ~f:(fun (ident, ty_opt) ->
+            ident, Option.map ~f:Ty.to_core ty_opt)
+        , () )
+  ;;
 end
 
 module Prog = struct
@@ -495,5 +562,10 @@ module Prog = struct
           decl :: decls_acc, ctx)
     in
     Decls (List.rev decls, ()), ctx
+  ;;
+
+  let to_core (Decls (decls, ())) =
+    let module N = Core_ast.Prog in
+    N.Decls (List.map ~f:Decl.to_core decls, ())
   ;;
 end

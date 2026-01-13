@@ -4,7 +4,7 @@ open Typing
 include Ast.Make (struct
     type var_ident = Var_ident.t
     type ctor_ident = Constr_ident.t
-    type type_ident = Type.t
+    type type_ident = Type_ident.t
     type tvar = Gen_var.t
 
     module Ext = struct
