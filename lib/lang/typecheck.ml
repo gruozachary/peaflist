@@ -2,27 +2,8 @@ open! Base
 open Result
 open Let_syntax
 
-module Make_var () : sig
-  type t
-
-  val zero : t
-  val succ : t -> t
-
-  include Comparable.S with type t := t
-end = struct
-  module T = struct
-    type t = int [@@deriving compare, sexp_of]
-
-    let zero = 0
-    let succ x = x + 1
-  end
-
-  include T
-  include Comparable.Make (T)
-end
-
-module Gen_var = Make_var ()
-module Uni_var = Make_var ()
+module Gen_var = Typing.Gen_var
+module Uni_var = Typing.Make_var ()
 
 type ty =
   | TUni of tu ref
