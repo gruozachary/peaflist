@@ -535,13 +535,14 @@ module Decl = struct
         ( ident
         , tvars
         , List.map ctors ~f:(fun (ident, ty_opt, cenv_entry) ->
-            let (ctor_data : Core_ast.ctor_data) = {
-              parent = cenv_entry.parent ;
-              tag = cenv_entry.tag ;
-              gen_vars = cenv_entry.gen_vars ;
-              arg_gens = List.map ~f:type_of_ty cenv_entry.arg_gens ;
-              res_gen = type_of_ty cenv_entry.res_gen ;
-            } in
+            let (ctor_data : Core_ast.ctor_data) =
+              { parent = cenv_entry.parent
+              ; tag = cenv_entry.tag
+              ; gen_vars = cenv_entry.gen_vars
+              ; arg_gens = List.map ~f:type_of_ty cenv_entry.arg_gens
+              ; res_gen = type_of_ty cenv_entry.res_gen
+              }
+            in
             ident, Option.map ~f:Ty.to_core ty_opt, ctor_data)
         , { arity = tenv_entry.arity; ctors = tenv_entry.ctors } )
   ;;

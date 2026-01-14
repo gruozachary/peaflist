@@ -138,7 +138,9 @@ let run ctx =
   | Line.Decl decl ->
     let%bind decl, rename_ctx = Lang.Rename.rename_decl ctx.rename_ctx decl in
     let decl = Lang.Desugar.desugar_decl ctx.rename_ctx decl in
-    let%map _, typecheck_ctx = Lang.Typecheck.typecheck_decl ctx.typecheck_ctx ctx.rename_ctx decl in
+    let%map _, typecheck_ctx =
+      Lang.Typecheck.typecheck_decl ctx.typecheck_ctx ctx.rename_ctx decl
+    in
     { ctx = { typecheck_ctx; rename_ctx }; should_quit = false }
   | Line.Command cmd -> handle_command ctx cmd
 ;;
