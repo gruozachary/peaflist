@@ -84,24 +84,19 @@ type ctx =
   ; cenv : (Constr_ident.t, cenv_entry, Constr_ident.comparator_witness) Map.t
   }
 
-let empty () = {
-  next_gen_var = Gen_var.zero ;
-  next_uni_var = Uni_var.zero ;
-  env = Map.empty (module Var_ident) ;
-  tenv = Map.empty (module Type_ident) ;
-  cenv = Map.empty (module Constr_ident) ;
-}
+let empty () =
+  { next_gen_var = Gen_var.zero
+  ; next_uni_var = Uni_var.zero
+  ; env = Map.empty (module Var_ident)
+  ; tenv = Map.empty (module Type_ident)
+  ; cenv = Map.empty (module Constr_ident)
+  }
+;;
 
 let term_fetch ctx ident =
   match Map.find ctx.env ident with
   | Some ty -> ty
   | None -> raise_s [%message "Internal compiler error: Variable out of scope"]
-;;
-
-let type_fetch ctx ident =
-  match Map.find ctx.tenv ident with
-  | Some entry -> entry
-  | None -> raise_s [%message "Internal compiler error: Type out of scope"]
 ;;
 
 let ctor_fetch ctx ident =
@@ -138,8 +133,6 @@ let fresh_gen_var ctx =
   ctx.next_gen_var <- Gen_var.succ x;
   x
 ;;
-
-let scheme_of_ty ty = Forall ([], ty)
 
 let fresh_tu_ref ctx =
   let x = ctx.next_uni_var in
@@ -224,7 +217,7 @@ include Ast.Make (struct
 
       module Decl = struct
         type for_val = scheme
-        type for_type = unit
+        type for_type = tenv_entry
       end
 
       module Prog = struct
@@ -501,9 +494,8 @@ module Decl = struct
       ( Val (ident, expr, scheme)
       , { ctx with env = Map.set ctx.env ~key:ident ~data:scheme } )
     | O.Type (ident, tvars, ctors, ()) ->
-      let tenv =
-        Map.set ctx.tenv ~key:ident ~data:{ arity = List.length tvars; ctors = [] }
-      in
+      let tenv_entry = { arity = List.length tvars; ctors = [] } in
+      let tenv = Map.set ctx.tenv ~key:ident ~data:tenv_entry in
       let tvar_map =
         List.map tvars ~f:(fun tvar -> tvar, fresh_gen_var ctx)
         |> Map.of_alist_exn (module Int)
@@ -533,7 +525,7 @@ module Decl = struct
                       }
               } ))
       in
-      Type (ident, gen_vars, List.rev ctors, ()), ctx
+      Type (ident, gen_vars, List.rev ctors, tenv_entry), ctx
   ;;
 
   let to_core (decl : t) =
@@ -541,13 +533,13 @@ module Decl = struct
     match decl with
     | Val (ident, expr, scheme) ->
       N.Val (ident, Expr.to_core expr, scheme_of_scheme scheme)
-    | Type (ident, tvars, ctors, ()) ->
+    | Type (ident, tvars, ctors, tenv_entry) ->
       N.Type
         ( ident
         , tvars
         , List.map ctors ~f:(fun (ident, ty_opt) ->
             ident, Option.map ~f:Ty.to_core ty_opt)
-        , () )
+        , { arity = tenv_entry.arity; ctors = tenv_entry.ctors } )
   ;;
 end
 

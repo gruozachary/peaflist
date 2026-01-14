@@ -1,6 +1,19 @@
 open! Base
 open Typing
 
+type type_data =
+  { arity : int
+  ; ctors : Constr_ident.t list
+  }
+
+type ctor_data =
+  { parent : Type_ident.t
+  ; tag : int
+  ; gen_vars : Gen_var.t list
+  ; arg_gens : Type.t list
+  ; res_gen : Type.t
+  }
+
 include Ast.Make (struct
     type var_ident = Var_ident.t
     type ctor_ident = Constr_ident.t
@@ -37,7 +50,7 @@ include Ast.Make (struct
 
       module Decl = struct
         type for_val = Scheme.t
-        type for_type = unit
+        type for_type = type_data
       end
 
       module Prog = struct
