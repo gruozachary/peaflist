@@ -90,7 +90,10 @@ end = struct
   let parse = Peasec.exec parser
 end
 
-type t = { rename_ctx : Lang.Rename.t }
+type t =
+  { rename_ctx : Lang.Rename.t
+  ; typecheck_ctx : Lang.Typecheck.ctx
+  }
 
 type run_output =
   { ctx : t
@@ -128,18 +131,22 @@ let run ctx =
   in
   match%bind Line.parse line |> of_option ~error:"Parse of input failed." with
   | Line.Expr expr ->
-    let%map expr = Lang.Rename.rename_expr ctx.rename_ctx expr in
-    let _ = Lang.Desugar.desugar_expr ctx.rename_ctx expr in
+    let%bind expr = Lang.Rename.rename_expr ctx.rename_ctx expr in
+    let expr = Lang.Desugar.desugar_expr ctx.rename_ctx expr in
+    let%map _ = Lang.Typecheck.typecheck_expr ctx.typecheck_ctx ctx.rename_ctx expr in
     { ctx; should_quit = false }
   | Line.Decl decl ->
-    let%map decl, rename_ctx = Lang.Rename.rename_decl ctx.rename_ctx decl in
-    let _ = Lang.Desugar.desugar_decl ctx.rename_ctx decl in
-    { ctx = { rename_ctx }; should_quit = false }
+    let%bind decl, rename_ctx = Lang.Rename.rename_decl ctx.rename_ctx decl in
+    let decl = Lang.Desugar.desugar_decl ctx.rename_ctx decl in
+    let%map _, typecheck_ctx = Lang.Typecheck.typecheck_decl ctx.typecheck_ctx ctx.rename_ctx decl in
+    { ctx = { typecheck_ctx; rename_ctx }; should_quit = false }
   | Line.Command cmd -> handle_command ctx cmd
 ;;
 
 let loop () =
-  let ctx = { rename_ctx = Lang.Rename.empty () } in
+  let ctx =
+    { rename_ctx = Lang.Rename.empty (); typecheck_ctx = Lang.Typecheck.empty () }
+  in
   let rec go ctx =
     match run ctx with
     | Result.Ok { should_quit = true; _ } -> ()
