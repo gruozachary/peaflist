@@ -75,8 +75,8 @@ let desugar_decl rename_ctx decl =
       ( ident
       , tvars
       , List.map
-          ~f:(fun (ctor_ident, ty) ->
-            ctor_ident, Option.map ~f:(fun ty -> desugar_ty ty) ty)
+          ~f:(fun (ctor_ident, ty, ()) ->
+            ctor_ident, Option.map ~f:(fun ty -> desugar_ty ty) ty, ())
           ctors
       , () )
 ;;

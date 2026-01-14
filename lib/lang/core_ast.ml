@@ -51,6 +51,7 @@ include Ast.Make (struct
       module Decl = struct
         type for_val = Scheme.t
         type for_type = type_data
+        type for_ctor = ctor_data
       end
 
       module Prog = struct

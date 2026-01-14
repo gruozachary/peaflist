@@ -35,6 +35,7 @@ include Ast.Make (struct
       module Decl = struct
         type for_val = unit
         type for_type = unit
+        type for_ctor = unit
       end
 
       module Prog = struct

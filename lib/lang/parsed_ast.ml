@@ -37,6 +37,7 @@ include Ast.Make (struct
       module Decl = struct
         type for_val = unit
         type for_type = unit
+        type for_ctor = unit
       end
 
       module Prog = struct
@@ -112,7 +113,7 @@ let equal_decl decl decl' =
     equal_string str str'
     && Ast.equal_pairs equal_string strs strs'
     && Ast.equal_pairs
-         (fun (str, opt) (str', opt') ->
+         (fun (str, opt, ()) (str', opt', ()) ->
             equal_string str str' && equal_option equal_ty opt opt')
          ctors
          ctors'

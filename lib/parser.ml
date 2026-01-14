@@ -240,7 +240,7 @@ let type_decl =
        let%map t =
          keyword "of" >*> Type.parse () >>| Option.some <|> return Option.None
        in
-       y, t)
+       y, t, ())
   in
   Decl.Type (x, tvs, ts, ())
 ;;

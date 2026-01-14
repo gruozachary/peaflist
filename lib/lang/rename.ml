@@ -205,16 +205,16 @@ let rename_decl ctx decl =
     let%map ctors, ctor_renamer =
       List.fold
         ~init:(return ([], ctx.ctor_renamer))
-        ~f:(fun acc (str, ty) ->
+        ~f:(fun acc (str, ty, ()) ->
           let%bind ctors, ctor_renamer = acc in
           match ty with
           | Some ty ->
             let%map ty = rename_ty ctx tvar_map ty in
             let ident, ctor_renamer = Renamer.fresh_add ~str ctor_renamer in
-            (ident, Some ty) :: ctors, ctor_renamer
+            (ident, Some ty, ()) :: ctors, ctor_renamer
           | None ->
             let ident, ctor_renamer = Renamer.fresh_add ~str ctor_renamer in
-            return ((ident, None) :: ctors, ctor_renamer))
+            return ((ident, None, ()) :: ctors, ctor_renamer))
         ctors
     in
     ( Type (ident, List.map tvars ~f:(Map.find_exn tvar_map), ctors, ())

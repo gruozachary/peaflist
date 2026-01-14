@@ -218,6 +218,7 @@ include Ast.Make (struct
       module Decl = struct
         type for_val = scheme
         type for_type = tenv_entry
+        type for_ctor = cenv_entry
       end
 
       module Prog = struct
@@ -506,24 +507,20 @@ module Decl = struct
         List.fold
           ctors
           ~init:(return (0, [], { ctx with tenv }))
-          ~f:(fun acc (ident_ctor, ty_ctor) ->
+          ~f:(fun acc (ident_ctor, ty_ctor, ()) ->
             let%map i, ctors, ctx = acc in
             let ty_ctor = Option.map ~f:(Ty.infer tvar_map) ty_ctor in
+            let ctor_entry =
+              { parent = ident
+              ; tag = i
+              ; gen_vars
+              ; arg_gens = flat_ty_of_opt_ty ty_ctor
+              ; res_gen
+              }
+            in
             ( i + 1
-            , (ident_ctor, ty_ctor) :: ctors
-            , { ctx with
-                cenv =
-                  Map.set
-                    ctx.cenv
-                    ~key:ident_ctor
-                    ~data:
-                      { parent = ident
-                      ; tag = i
-                      ; gen_vars
-                      ; arg_gens = flat_ty_of_opt_ty ty_ctor
-                      ; res_gen
-                      }
-              } ))
+            , (ident_ctor, ty_ctor, ctor_entry) :: ctors
+            , { ctx with cenv = Map.set ctx.cenv ~key:ident_ctor ~data:ctor_entry } ))
       in
       Type (ident, gen_vars, List.rev ctors, tenv_entry), ctx
   ;;
@@ -537,8 +534,15 @@ module Decl = struct
       N.Type
         ( ident
         , tvars
-        , List.map ctors ~f:(fun (ident, ty_opt) ->
-            ident, Option.map ~f:Ty.to_core ty_opt)
+        , List.map ctors ~f:(fun (ident, ty_opt, cenv_entry) ->
+            let (ctor_data : Core_ast.ctor_data) = {
+              parent = cenv_entry.parent ;
+              tag = cenv_entry.tag ;
+              gen_vars = cenv_entry.gen_vars ;
+              arg_gens = List.map ~f:type_of_ty cenv_entry.arg_gens ;
+              res_gen = type_of_ty cenv_entry.res_gen ;
+            } in
+            ident, Option.map ~f:Ty.to_core ty_opt, ctor_data)
         , { arity = tenv_entry.arity; ctors = tenv_entry.ctors } )
   ;;
 end

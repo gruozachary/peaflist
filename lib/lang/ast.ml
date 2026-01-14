@@ -39,6 +39,7 @@ module type META = sig
     module Decl : sig
       type for_val
       type for_type
+      type for_ctor
     end
 
     module Prog : sig
@@ -93,7 +94,7 @@ module Make (M : META) = struct
       | Type of
           M.type_ident
           * M.tvar list
-          * (M.ctor_ident * Ty.t option) list
+          * (M.ctor_ident * Ty.t option * M.Ext.Decl.for_ctor) list
           * M.Ext.Decl.for_type
   end
 

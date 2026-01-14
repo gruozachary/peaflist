@@ -52,7 +52,7 @@ td ('a) maybe :=
         ( [ Decl.Type
               ( "maybe"
               , [ "'a" ]
-              , [ "Just", Some (Ty.Var ("'a", ())); "Nothing", None ]
+              , [ "Just", Some (Ty.Var ("'a", ())), (); "Nothing", None, () ]
               , () )
           ]
         , () )
@@ -82,8 +82,8 @@ vd length := fun l ->
                          ( [ Ty.Var ("'a", ())
                            ; Ty.Con ("list", [ Ty.Var ("'a", ()) ], ())
                            ]
-                         , () )) )
-                ; "Nil", None
+                         , () )) , ())
+                ; "Nil", None, ()
                 ]
               , () )
           ; Decl.Val
@@ -160,7 +160,7 @@ td ('a, 'b) test :=
                              , Ty.Con
                                  ("result", [ Ty.Var ("'a", ()); Ty.Var ("'b", ()) ], ())
                              , () )
-                         , () )) )
+                         , () )) , ())
                 ]
               , () )
           ]
