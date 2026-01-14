@@ -194,10 +194,12 @@ let generalise ctx ty =
       free_uni_vars
   in
   let rec replace = function
-    | TUni { contents = Unbound uni_var } as ty ->
-      Map.find map uni_var
-      |> Option.map ~f:(fun gen_var -> TGen gen_var)
-      |> Option.value ~default:ty
+    | TUni ({ contents = Unbound uni_var } as tu_ref) as ty ->
+      (match Map.find map uni_var with
+       | Some gen_var ->
+         tu_ref := Link (TGen gen_var);
+         TGen gen_var
+       | None -> ty)
     | TUni { contents = Link _ } as ty -> replace (prune ty)
     | TGen _ as ty -> ty
     | TFun (ty_fun, ty_arg) -> TFun (replace ty_fun, replace ty_arg)
