@@ -94,14 +94,29 @@ let empty () =
 ;;
 
 let basic (rename : Rename.t) =
+  let vident str = Rename.Renamer.fetch_exn rename.var_renamer ~str in
+  let tident str = Rename.Renamer.fetch_exn rename.type_renamer ~str in
   let ctx = empty () in
-  let tenv =
+  let two_int_fun =
+    Forall
+      ( []
+      , TFun
+          ( TCon (tident "int", [])
+          , TFun (TCon (tident "int", []), TCon (tident "int", [])) ) )
+  in
+  let env =
     Map.of_alist_exn
-      (module Type_ident)
-      [ Rename.Renamer.fetch_exn rename.type_renamer ~str:"int", { arity = 0; ctors = [] }
+      (module Var_ident)
+      [ vident "+", two_int_fun
+      ; vident "-", two_int_fun
+      ; vident "*", two_int_fun
+      ; vident "/", two_int_fun
       ]
   in
-  { ctx with tenv }
+  let tenv =
+    Map.of_alist_exn (module Type_ident) [ tident "int", { arity = 0; ctors = [] } ]
+  in
+  { ctx with env; tenv }
 ;;
 
 let term_fetch ctx ident =

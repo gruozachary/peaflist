@@ -58,9 +58,14 @@ let empty () =
 ;;
 
 let basic () =
+  let add str renamer =
+    let _, ctx = Renamer.fresh_add ~str renamer in
+    ctx
+  in
   let ctx = empty () in
-  let _, type_renamer = ctx.type_renamer |> Renamer.fresh_add ~str:"int" in
-  { ctx with type_renamer }
+  let type_renamer = ctx.type_renamer |> add "int" in
+  let var_renamer = ctx.var_renamer |> add "+" |> add "-" |> add "*" |> add "/" in
+  { ctx with type_renamer; var_renamer }
 ;;
 
 let rec rename_pat ctx pat =
