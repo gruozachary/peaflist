@@ -81,8 +81,16 @@ type ctx =
   ; mutable next_uni_var : Uni_var.t
   ; env : (Var_ident.t, scheme, Var_ident.comparator_witness) Map.t
   ; tenv : (Type_ident.t, tenv_entry, Type_ident.comparator_witness) Map.t
-  ; cenv : (Constr_ident.t, cenv_entry, Type_ident.comparator_witness) Map.t
+  ; cenv : (Constr_ident.t, cenv_entry, Constr_ident.comparator_witness) Map.t
   }
+
+let empty () = {
+  next_gen_var = Gen_var.zero ;
+  next_uni_var = Uni_var.zero ;
+  env = Map.empty (module Var_ident) ;
+  tenv = Map.empty (module Type_ident) ;
+  cenv = Map.empty (module Constr_ident) ;
+}
 
 let term_fetch ctx ident =
   match Map.find ctx.env ident with
@@ -569,3 +577,15 @@ module Prog = struct
     N.Decls (List.map ~f:Decl.to_core decls, ())
   ;;
 end
+
+let typecheck_expr ctx rename expr = Expr.infer ctx rename expr >>| Expr.to_core
+
+let typecheck_decl ctx rename decl =
+  let%map decl, ctx = Decl.infer ctx rename decl in
+  Decl.to_core decl, ctx
+;;
+
+let typecheck_prog ctx rename prog =
+  let%map prog, ctx = Prog.infer ctx rename prog in
+  Prog.to_core prog, ctx
+;;
