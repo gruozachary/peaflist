@@ -93,6 +93,17 @@ let empty () =
   }
 ;;
 
+let basic (rename : Rename.t) =
+  let ctx = empty () in
+  let tenv =
+    Map.of_alist_exn
+      (module Type_ident)
+      [ Rename.Renamer.fetch_exn rename.type_renamer ~str:"int", { arity = 0; ctors = [] }
+      ]
+  in
+  { ctx with tenv }
+;;
+
 let term_fetch ctx ident =
   match Map.find ctx.env ident with
   | Some ty -> ty

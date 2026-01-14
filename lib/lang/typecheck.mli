@@ -1,6 +1,7 @@
 type ctx
 
 val empty : unit -> ctx
+val basic : Rename.t -> ctx
 
 val typecheck_expr
   :  ctx

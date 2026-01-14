@@ -26,6 +26,7 @@ module Renamer = struct
   ;;
 
   let fetch ~str renamer = Map.find renamer.map str
+  let fetch_exn ~str renamer = Map.find_exn renamer.map str
 
   let compose renamer renamer' =
     { renamer with
@@ -54,6 +55,12 @@ let empty () =
   ; ctor_renamer = Renamer.empty Constr_ident.create
   ; type_renamer = Renamer.empty Type_ident.create
   }
+;;
+
+let basic () =
+  let ctx = empty () in
+  let _, type_renamer = ctx.type_renamer |> Renamer.fresh_add ~str:"int" in
+  { ctx with type_renamer }
 ;;
 
 let rec rename_pat ctx pat =

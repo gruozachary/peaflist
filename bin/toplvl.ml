@@ -146,9 +146,9 @@ let run ctx =
 ;;
 
 let loop () =
-  let ctx =
-    { rename_ctx = Lang.Rename.empty (); typecheck_ctx = Lang.Typecheck.empty () }
-  in
+  let rename_ctx = Lang.Rename.basic () in
+  let typecheck_ctx = Lang.Typecheck.basic rename_ctx in
+  let ctx = { rename_ctx; typecheck_ctx } in
   let rec go ctx =
     match run ctx with
     | Result.Ok { should_quit = true; _ } -> ()
