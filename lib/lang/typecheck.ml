@@ -278,7 +278,7 @@ module Expr = struct
     | Ident (_, ty) -> ty
     | Constr (_, _, ty) -> ty
     | Apply (_, _, ty) -> ty
-    | Lambda (_, expr_body, _) -> ty_of rename expr_body
+    | Lambda (_, _, ty) -> ty
     | Let (_, _, expr_body, _) -> ty_of rename expr_body
     | Match (_, _, ty) -> ty
     | Tuple (_, ty) -> ty
@@ -346,7 +346,7 @@ module Expr = struct
           rename
           expr_body
       in
-      Lambda (ident, expr_body, ty_arg)
+      Lambda (ident, expr_body, Type.Fun (ty_arg, ty_of rename expr_body))
     | O.Let (ident, expr_binding, expr_body, ()) ->
       let%bind expr_binding = infer ctx rename expr_binding in
       let scheme_binding = generalise ctx (ty_of rename expr_binding) in
