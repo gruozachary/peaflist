@@ -138,9 +138,13 @@ let run ctx =
   | Line.Decl decl ->
     let%bind decl, rename_ctx = Lang.Rename.rename_decl ctx.rename_ctx decl in
     let decl = Lang.Desugar.desugar_decl ctx.rename_ctx decl in
-    let%map _, typecheck_ctx =
+    let%map decl, typecheck_ctx =
       Lang.Typecheck.typecheck_decl ctx.typecheck_ctx ctx.rename_ctx decl
     in
+    (match decl with
+     | Lang.Core_ast.Unified.Decl.Val (_, _, scheme) ->
+       Lang.Typing.Scheme.to_string scheme |> Stdio.print_endline
+     | Lang.Core_ast.Unified.Decl.Type (_, _, _, _) -> ());
     { ctx = { typecheck_ctx; rename_ctx }; should_quit = false }
   | Line.Command cmd -> handle_command ctx cmd
 ;;

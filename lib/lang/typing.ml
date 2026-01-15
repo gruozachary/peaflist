@@ -6,6 +6,7 @@ module Make_var () : sig
   val zero : t
   val succ : t -> t
   val sexp_of_t : t -> Sexp.t
+  val to_string : t -> string
 
   include Comparable.S with type t := t
 end = struct
@@ -14,6 +15,7 @@ end = struct
 
     let zero = 0
     let succ x = x + 1
+    let to_string = Int.to_string
   end
 
   include T
@@ -40,6 +42,9 @@ module Type = struct
     | Unbound of Uni_var.t
     | Link of phantom_ununified t
 
+  type unified_t = phantom_unified t
+  type ununified_t = phantom_ununified t
+
   let rec sexp_of_t : type a. a t -> Sexp.t = function
     | Gen gen_var -> Sexp.List [ Sexp.Atom "Gen"; Gen_var.sexp_of_t gen_var ]
     | Uni { contents = Unbound uni_var } ->
@@ -56,8 +61,38 @@ module Type = struct
         ]
   ;;
 
-  type unified_t = phantom_unified t
-  type ununified_t = phantom_ununified t
+  let prec : type a. a t -> int = function
+    | Uni _ -> 3
+    | Gen _ -> 3
+    | Fun _ -> 1
+    | Prod _ -> 2
+    | Con _ -> 3
+  ;;
+
+  let rec to_string : type a. a t -> string =
+    fun ty ->
+    let go ty' =
+      if prec ty' < prec ty then "(" ^ to_string ty' ^ ")" else to_string ty'
+    in
+    match ty with
+    | Uni { contents = Unbound uni_var } -> "unbound" ^ Uni_var.to_string uni_var
+    | Uni { contents = Link ty } -> "link" ^ go ty
+    | Gen gen_var -> Gen_var.to_string gen_var
+    | Fun (t, t') -> go t ^ " -> " ^ go t'
+    | Prod ts ->
+      List.map ~f:go ts
+      |> List.intersperse ~sep:" * "
+      |> List.fold ~init:"" ~f:String.append
+    | Con (ident, []) -> Type_ident.to_string ident
+    | Con (ident, [ t ]) -> go t ^ " " ^ Type_ident.to_string ident
+    | Con (ident, ts) ->
+      "("
+      ^ (List.map ~f:go ts
+         |> List.intersperse ~sep:" "
+         |> List.fold ~init:"" ~f:String.append)
+      ^ ") "
+      ^ Type_ident.to_string ident
+  ;;
 end
 
 module Scheme = struct
@@ -73,5 +108,14 @@ module Scheme = struct
       ; Sexp.List (List.map ~f:Gen_var.sexp_of_t gen_vars)
       ; Type.sexp_of_t ty
       ]
+  ;;
+
+  let to_string : type a. a t -> string =
+    fun (Forall (qs, t)) ->
+    (List.map qs ~f:Gen_var.to_string
+     |> List.intersperse ~sep:" "
+     |> List.fold ~init:"forall " ~f:String.append)
+    ^ " . "
+    ^ Type.to_string t
   ;;
 end
