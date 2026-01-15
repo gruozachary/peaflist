@@ -133,18 +133,17 @@ let run ctx =
   | Line.Expr expr ->
     let%bind expr = Lang.Rename.rename_expr ctx.rename_ctx expr in
     let expr = Lang.Desugar.desugar_expr ctx.rename_ctx expr in
-    let%map _ = Lang.Typecheck.typecheck_expr ctx.typecheck_ctx ctx.rename_ctx expr in
+    let%map _, scheme =
+      Lang.Typecheck.typecheck_expr ctx.typecheck_ctx ctx.rename_ctx expr
+    in
+    Lang.Typing.Scheme.to_string scheme |> Stdio.print_endline;
     { ctx; should_quit = false }
   | Line.Decl decl ->
     let%bind decl, rename_ctx = Lang.Rename.rename_decl ctx.rename_ctx decl in
     let decl = Lang.Desugar.desugar_decl ctx.rename_ctx decl in
-    let%map decl, typecheck_ctx =
+    let%map _, typecheck_ctx =
       Lang.Typecheck.typecheck_decl ctx.typecheck_ctx ctx.rename_ctx decl
     in
-    (match decl with
-     | Lang.Core_ast.Unified.Decl.Val (_, _, scheme) ->
-       Lang.Typing.Scheme.to_string scheme |> Stdio.print_endline
-     | Lang.Core_ast.Unified.Decl.Type (_, _, _, _) -> ());
     { ctx = { typecheck_ctx; rename_ctx }; should_quit = false }
   | Line.Command cmd -> handle_command ctx cmd
 ;;

@@ -7,7 +7,7 @@ val typecheck_expr
   :  ctx
   -> Rename.t
   -> Desugared_ast.Expr.t
-  -> (Core_ast.Unified.Expr.t, string) result
+  -> (Core_ast.Unified.Expr.t * Typing.Scheme.unified_t, string) result
 
 val typecheck_decl
   :  ctx

@@ -543,7 +543,11 @@ module Prog = struct
   ;;
 end
 
-let typecheck_expr ctx rename expr = Expr.infer ctx rename expr >>| Expr.clean
+let typecheck_expr ctx rename expr =
+  let%map expr = Expr.infer ctx rename expr in
+  let scheme = generalise ctx (Expr.ty_of rename expr) in
+  Expr.clean expr, scheme_clean scheme
+;;
 
 let typecheck_decl ctx rename decl =
   let%map decl, ctx = Decl.infer ctx rename decl in
