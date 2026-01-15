@@ -1,24 +1,14 @@
 open! Base
 open Result
 open Let_syntax
-module Gen_var = Typing.Gen_var
-module Uni_var = Typing.Make_var ()
+open Typing
 
-type ty =
-  | TUni of tu ref
-  | TGen of Gen_var.t
-  | TFun of ty * ty
-  | TProd of ty list
-  | TCon of Type_ident.t * ty list
-
-and tu =
-  | Unbound of Uni_var.t
-  | Link of ty
-
-type scheme = Forall of Gen_var.t list * ty
+include Core_ast.Make (struct
+    type tag = Type.phantom_ununified
+  end)
 
 let rec prune = function
-  | TUni ({ contents = Link ty } as tu_ref) ->
+  | Type.Uni ({ contents = Type.Link ty } as tu_ref) ->
     let root = prune ty in
     tu_ref := Link root;
     root
@@ -26,6 +16,7 @@ let rec prune = function
 ;;
 
 let rec unify ty1 ty2 =
+  let open Type in
   let unify_lists tys tys' =
     let%bind ty_pairs =
       match List.zip tys tys' with
@@ -36,52 +27,24 @@ let rec unify ty1 ty2 =
     ()
   in
   match prune ty1, prune ty2 with
-  | TUni tu_ref, TUni tu_ref' when phys_equal tu_ref tu_ref' -> return ()
-  | TUni tu_ref, ty | ty, TUni tu_ref -> return (tu_ref := Link ty)
-  | TFun (ty_fun, ty_arg), TFun (ty_fun', ty_arg') ->
+  | Uni tu_ref, Uni tu_ref' when phys_equal tu_ref tu_ref' -> return ()
+  | Uni tu_ref, ty | ty, Uni tu_ref -> return (tu_ref := Link ty)
+  | Fun (ty_fun, ty_arg), Fun (ty_fun', ty_arg') ->
     let%bind _ = unify ty_fun ty_fun' in
     unify ty_arg ty_arg'
-  | TProd tys, TProd tys' -> unify_lists tys tys'
-  | TCon (ident, tys), TCon (ident', tys') when Type_ident.equal ident ident' ->
+  | Prod tys, Prod tys' -> unify_lists tys tys'
+  | Con (ident, tys), Con (ident', tys') when Type_ident.equal ident ident' ->
     unify_lists tys tys'
-  | TGen gen_var, TGen gen_var' when Gen_var.equal gen_var gen_var' -> return ()
+  | Gen gen_var, Gen gen_var' when Gen_var.equal gen_var gen_var' -> return ()
   | _ -> fail "Type unification failed"
 ;;
-
-let rec type_of_ty (ty : ty) =
-  match prune ty with
-  | TUni { contents = Link ty } -> type_of_ty ty
-  | TUni { contents = Unbound _ } ->
-    raise_s [%message "Internal compiler error: Attempt to convert ununified type"]
-  | TGen gen_var -> Typing.Type.Gen gen_var
-  | TFun (ty_arg, ty_res) -> Typing.Type.Fun (type_of_ty ty_arg, type_of_ty ty_res)
-  | TProd tys -> Typing.Type.Prod (List.map ~f:type_of_ty tys)
-  | TCon (ident, tys) -> Typing.Type.Con (ident, List.map ~f:type_of_ty tys)
-;;
-
-let scheme_of_scheme (Forall (gen_vars, ty)) =
-  Typing.Scheme.Forall (gen_vars, type_of_ty ty)
-;;
-
-type tenv_entry =
-  { arity : int
-  ; ctors : Constr_ident.t list
-  }
-
-type cenv_entry =
-  { parent : Type_ident.t
-  ; tag : int
-  ; gen_vars : Gen_var.t list
-  ; arg_gens : ty list
-  ; res_gen : ty
-  }
 
 type ctx =
   { mutable next_gen_var : Gen_var.t
   ; mutable next_uni_var : Uni_var.t
-  ; env : (Var_ident.t, scheme, Var_ident.comparator_witness) Map.t
-  ; tenv : (Type_ident.t, tenv_entry, Type_ident.comparator_witness) Map.t
-  ; cenv : (Constr_ident.t, cenv_entry, Constr_ident.comparator_witness) Map.t
+  ; env : (Var_ident.t, Scheme.ununified_t, Var_ident.comparator_witness) Map.t
+  ; tenv : (Type_ident.t, type_data, Type_ident.comparator_witness) Map.t
+  ; cenv : (Constr_ident.t, ctor_data, Constr_ident.comparator_witness) Map.t
   }
 
 let empty () =
@@ -94,15 +57,15 @@ let empty () =
 ;;
 
 let basic (rename : Rename.t) =
+  let open Type in
   let vident str = Rename.Renamer.fetch_exn rename.var_renamer ~str in
   let tident str = Rename.Renamer.fetch_exn rename.type_renamer ~str in
   let ctx = empty () in
   let two_int_fun =
-    Forall
+    Scheme.Forall
       ( []
-      , TFun
-          ( TCon (tident "int", [])
-          , TFun (TCon (tident "int", []), TCon (tident "int", [])) ) )
+      , Fun (Con (tident "int", []), Fun (Con (tident "int", []), Con (tident "int", [])))
+      )
   in
   let env =
     Map.of_alist_exn
@@ -132,25 +95,26 @@ let ctor_fetch ctx ident =
 ;;
 
 let rec free_in_ty ty =
+  let open Type in
   match ty with
-  | TUni { contents = Unbound uni_var } -> Set.singleton (module Uni_var) uni_var
-  | TUni { contents = Link _ } -> free_in_ty (prune ty)
-  | TGen _ -> Set.empty (module Uni_var)
-  | TFun (ty_fun, ty_arg) -> Set.union (free_in_ty ty_fun) (free_in_ty ty_arg)
-  | TProd tys -> List.map tys ~f:free_in_ty |> Set.union_list (module Uni_var)
-  | TCon (_, tys) -> List.map tys ~f:free_in_ty |> Set.union_list (module Uni_var)
+  | Uni { contents = Unbound uni_var } -> Set.singleton (module Uni_var) uni_var
+  | Uni { contents = Link _ } -> free_in_ty (prune ty)
+  | Gen _ -> Set.empty (module Uni_var)
+  | Fun (ty_fun, ty_arg) -> Set.union (free_in_ty ty_fun) (free_in_ty ty_arg)
+  | Prod tys -> List.map tys ~f:free_in_ty |> Set.union_list (module Uni_var)
+  | Con (_, tys) -> List.map tys ~f:free_in_ty |> Set.union_list (module Uni_var)
   | _ -> .
 ;;
 
 let free_in_env =
   Map.fold
     ~init:(Set.empty (module Uni_var))
-    ~f:(fun ~key:_ ~data:(Forall (_, ty)) acc -> Set.union acc (free_in_ty ty))
+    ~f:(fun ~key:_ ~data:(Scheme.Forall (_, ty)) acc -> Set.union acc (free_in_ty ty))
 ;;
 
 let nullary_type_of_str (rename : Rename.t) str =
   match Rename.Renamer.fetch ~str rename.type_renamer with
-  | Some ident -> TCon (ident, [])
+  | Some ident -> Type.Con (ident, [])
   | None -> raise_s [%message "Internal compiler error: Unknown type"]
 ;;
 
@@ -163,29 +127,31 @@ let fresh_gen_var ctx =
 let fresh_tu_ref ctx =
   let x = ctx.next_uni_var in
   ctx.next_uni_var <- Uni_var.succ x;
-  TUni (Ref.create (Unbound x))
+  Type.Uni (Ref.create (Type.Unbound x))
 ;;
 
 let instantiate_multi ctx gen_vars tys =
+  let open Type in
   let map =
     List.map ~f:(fun gen_var -> gen_var, fresh_tu_ref ctx) gen_vars
     |> Map.of_alist_exn (module Gen_var)
   in
   let rec replace = function
-    | TUni _ as ty -> ty
-    | TGen gen_var as ty -> Map.find map gen_var |> Option.value ~default:ty
-    | TFun (ty_fun, ty_arg) -> TFun (replace ty_fun, replace ty_arg)
-    | TProd tys -> TProd (List.map ~f:replace tys)
-    | TCon (ident, tys) -> TCon (ident, List.map ~f:replace tys)
+    | Uni _ as ty -> ty
+    | Gen gen_var as ty -> Map.find map gen_var |> Option.value ~default:ty
+    | Fun (ty_fun, ty_arg) -> Fun (replace ty_fun, replace ty_arg)
+    | Prod tys -> Prod (List.map ~f:replace tys)
+    | Con (ident, tys) -> Con (ident, List.map ~f:replace tys)
   in
   List.map ~f:replace tys
 ;;
 
-let instantiate ctx (Forall (gen_vars, ty)) =
+let instantiate ctx (Scheme.Forall (gen_vars, ty)) =
   instantiate_multi ctx gen_vars [ ty ] |> List.hd_exn
 ;;
 
 let generalise ctx ty =
+  let open Type in
   let free_uni_vars = Set.diff (free_in_ty ty) (free_in_env ctx.env) in
   let map =
     Set.fold
@@ -194,66 +160,36 @@ let generalise ctx ty =
       free_uni_vars
   in
   let rec replace = function
-    | TUni ({ contents = Unbound uni_var } as tu_ref) as ty ->
+    | Uni ({ contents = Unbound uni_var } as tu_ref) as ty ->
       (match Map.find map uni_var with
        | Some gen_var ->
-         tu_ref := Link (TGen gen_var);
-         TGen gen_var
+         tu_ref := Link (Gen gen_var);
+         Gen gen_var
        | None -> ty)
-    | TUni { contents = Link _ } as ty -> replace (prune ty)
-    | TGen _ as ty -> ty
-    | TFun (ty_fun, ty_arg) -> TFun (replace ty_fun, replace ty_arg)
-    | TProd tys -> TProd (List.map ~f:replace tys)
-    | TCon (ident, tys) -> TCon (ident, List.map ~f:replace tys)
+    | Uni { contents = Link _ } as ty -> replace (prune ty)
+    | Gen _ as ty -> ty
+    | Fun (ty_fun, ty_arg) -> Fun (replace ty_fun, replace ty_arg)
+    | Prod tys -> Prod (List.map ~f:replace tys)
+    | Con (ident, tys) -> Con (ident, List.map ~f:replace tys)
   in
-  Forall (Map.data map, replace ty)
+  Scheme.Forall (Map.data map, replace ty)
 ;;
 
-include Ast.Make (struct
-    type var_ident = Var_ident.t
-    type ctor_ident = Constr_ident.t
-    type type_ident = Type_ident.t
-    type tvar = Gen_var.t
+let rec ty_clean : Type.ununified_t -> Type.unified_t =
+  fun ty ->
+  match prune ty with
+  | Uni { contents = Link ty } -> ty_clean ty
+  | Uni { contents = Unbound _ } ->
+    raise_s [%message "Internal compiler error: Attempt to convert ununified type"]
+  | Gen gen_var -> Typing.Type.Gen gen_var
+  | Fun (ty_arg, ty_res) -> Typing.Type.Fun (ty_clean ty_arg, ty_clean ty_res)
+  | Prod tys -> Typing.Type.Prod (List.map ~f:ty_clean tys)
+  | Con (ident, tys) -> Typing.Type.Con (ident, List.map ~f:ty_clean tys)
+;;
 
-    module Ext = struct
-      module Pat = struct
-        type for_int = unit
-        type for_ident = ty
-        type for_tuple = ty
-        type for_constr = ty
-      end
-
-      module Expr = struct
-        type for_int = unit
-        type for_ident = ty
-        type for_constr = ty
-        type for_apply = ty
-        type for_group = Ast.void
-        type for_lambda = ty
-        type for_let = scheme
-        type for_match = ty
-        type for_tuple = ty
-        type for_binop = Ast.void
-      end
-
-      module Ty = struct
-        type for_var = ty
-        type for_con = ty
-        type for_prod = ty
-        type for_fun = ty
-      end
-
-      module Decl = struct
-        type for_val = scheme
-        type for_type = tenv_entry
-        type for_ctor = cenv_entry
-      end
-
-      module Prog = struct
-        type for_prog = unit
-      end
-    end
-  end)
+let scheme_clean : Scheme.ununified_t -> Scheme.unified_t =
+  fun (Scheme.Forall (gen_vars, ty)) -> Scheme.Forall (gen_vars, ty_clean ty)
+;;
 
 module Pat = struct
   include Pat
@@ -296,10 +232,12 @@ module Pat = struct
     | O.Int (x, ()) -> return (Int (x, ()), Map.empty (module Var_ident))
     | O.Ident (ident, ()) ->
       let ty = fresh_tu_ref ctx in
-      return (Ident (ident, ty), Map.singleton (module Var_ident) ident (Forall ([], ty)))
+      return
+        ( Ident (ident, ty)
+        , Map.singleton (module Var_ident) ident (Scheme.Forall ([], ty)) )
     | O.Tuple (pats, ()) ->
       let%map pats, env = infer_list pats in
-      Tuple (pats, TProd (List.map ~f:(ty_of rename) pats)), env
+      Tuple (pats, Type.Prod (List.map ~f:(ty_of rename) pats)), env
     | O.Constr (ident, pats, ()) ->
       let entry = ctor_fetch ctx ident in
       let arg_tys, res_ty =
@@ -321,13 +259,13 @@ module Pat = struct
       Constr (ident, pats_inf, res_ty), env_inf
   ;;
 
-  let rec to_core (pat : t) =
-    let module N = Core_ast.Pat in
+  let rec clean (pat : t) =
+    let module N = Core_ast.Unified.Pat in
     match pat with
     | Int (x, ()) -> N.Int (x, ())
-    | Ident (ident, ty) -> N.Ident (ident, type_of_ty ty)
-    | Tuple (pats, ty) -> N.Tuple (List.map ~f:to_core pats, type_of_ty ty)
-    | Constr (ident, pats, ty) -> N.Constr (ident, List.map ~f:to_core pats, type_of_ty ty)
+    | Ident (ident, ty) -> N.Ident (ident, ty_clean ty)
+    | Tuple (pats, ty) -> N.Tuple (List.map ~f:clean pats, ty_clean ty)
+    | Constr (ident, pats, ty) -> N.Constr (ident, List.map ~f:clean pats, ty_clean ty)
   ;;
 end
 
@@ -397,11 +335,11 @@ module Expr = struct
       let ty_fun = ty_of rename expr_fun in
       let ty_arg = ty_of rename expr_arg in
       let ty_res = fresh_tu_ref ctx in
-      let%map () = unify ty_fun (TFun (ty_arg, ty_res)) in
+      let%map () = unify ty_fun (Type.Fun (ty_arg, ty_res)) in
       Apply (expr_fun, expr_arg, ty_res)
     | O.Lambda (ident, expr_body, ()) ->
       let ty_arg = fresh_tu_ref ctx in
-      let scheme_arg = Forall ([], ty_arg) in
+      let scheme_arg = Scheme.Forall ([], ty_arg) in
       let%map expr_body =
         infer
           { ctx with env = Map.set ctx.env ~key:ident ~data:scheme_arg }
@@ -435,28 +373,27 @@ module Expr = struct
       Match (expr_scrutinee, List.rev arms, ty)
     | O.Tuple (exprs, ()) ->
       let%map exprs = infer_list exprs in
-      Tuple (exprs, TProd (List.map ~f:(ty_of rename) exprs))
+      Tuple (exprs, Type.Prod (List.map ~f:(ty_of rename) exprs))
     | _ -> .
   ;;
 
-  let rec to_core (expr : t) =
-    let module N = Core_ast.Expr in
+  let rec clean (expr : t) =
+    let module N = Core_ast.Unified.Expr in
     match expr with
     | Int (x, ()) -> N.Int (x, ())
-    | Ident (ident, ty) -> N.Ident (ident, type_of_ty ty)
-    | Constr (ident, exprs, ty) ->
-      N.Constr (ident, List.map ~f:to_core exprs, type_of_ty ty)
+    | Ident (ident, ty) -> N.Ident (ident, ty_clean ty)
+    | Constr (ident, exprs, ty) -> N.Constr (ident, List.map ~f:clean exprs, ty_clean ty)
     | Apply (expr_fun, expr_arg, ty) ->
-      N.Apply (to_core expr_fun, to_core expr_arg, type_of_ty ty)
-    | Lambda (ident, expr_body, ty) -> N.Lambda (ident, to_core expr_body, type_of_ty ty)
+      N.Apply (clean expr_fun, clean expr_arg, ty_clean ty)
+    | Lambda (ident, expr_body, ty) -> N.Lambda (ident, clean expr_body, ty_clean ty)
     | Let (ident, expr_binding, expr_body, scheme) ->
-      N.Let (ident, to_core expr_binding, to_core expr_body, scheme_of_scheme scheme)
+      N.Let (ident, clean expr_binding, clean expr_body, scheme_clean scheme)
     | Match (expr_scrutinee, arms, ty) ->
       N.Match
-        ( to_core expr_scrutinee
-        , List.map arms ~f:(fun (pat, expr) -> Pat.to_core pat, to_core expr)
-        , type_of_ty ty )
-    | Tuple (exprs, ty) -> N.Tuple (List.map ~f:to_core exprs, type_of_ty ty)
+        ( clean expr_scrutinee
+        , List.map arms ~f:(fun (pat, expr) -> Pat.clean pat, clean expr)
+        , ty_clean ty )
+    | Tuple (exprs, ty) -> N.Tuple (List.map ~f:clean exprs, ty_clean ty)
     | _ -> .
   ;;
 end
@@ -479,29 +416,29 @@ module Ty = struct
     match ty with
     | O.Var (x, _) ->
       (match Map.find tvar_map x with
-       | Some gen_var -> Var (gen_var, TGen gen_var)
+       | Some gen_var -> Var (gen_var, Type.Gen gen_var)
        | None ->
          raise_s
            [%message "Internal compiler error: Mapping from int to gen var doesn't exist"])
     | O.Con (ident, tys, ()) ->
       let tys = List.map tys ~f:(infer tvar_map) in
-      Con (ident, tys, TCon (ident, List.map ~f:ty_of tys))
+      Con (ident, tys, Type.Con (ident, List.map ~f:ty_of tys))
     | O.Prod (tys, ()) ->
       let tys = List.map tys ~f:(infer tvar_map) in
-      Prod (tys, TProd (List.map ~f:ty_of tys))
+      Prod (tys, Type.Prod (List.map ~f:ty_of tys))
     | O.Fun (ty_fun, ty_arg, ()) ->
       let ty_fun = infer tvar_map ty_fun in
       let ty_arg = infer tvar_map ty_arg in
-      Fun (ty_fun, ty_arg, TFun (ty_of ty_fun, ty_of ty_arg))
+      Fun (ty_fun, ty_arg, Type.Fun (ty_of ty_fun, ty_of ty_arg))
   ;;
 
-  let rec to_core (ty : t) =
-    let module N = Core_ast.Ty in
+  let rec clean (ty : t) =
+    let module N = Core_ast.Unified.Ty in
     match ty with
-    | Var (gen_var, ty) -> N.Var (gen_var, type_of_ty ty)
-    | Con (ident, tys, ty) -> N.Con (ident, List.map ~f:to_core tys, type_of_ty ty)
-    | Prod (tys, ty) -> N.Prod (List.map ~f:to_core tys, type_of_ty ty)
-    | Fun (ty_arg, ty_res, ty) -> N.Fun (to_core ty_arg, to_core ty_res, type_of_ty ty)
+    | Var (gen_var, ty) -> N.Var (gen_var, ty_clean ty)
+    | Con (ident, tys, ty) -> N.Con (ident, List.map ~f:clean tys, ty_clean ty)
+    | Prod (tys, ty) -> N.Prod (List.map ~f:clean tys, ty_clean ty)
+    | Fun (ty_arg, ty_res, ty) -> N.Fun (clean ty_arg, clean ty_res, ty_clean ty)
   ;;
 end
 
@@ -512,7 +449,7 @@ module Decl = struct
     let module O = Desugared_ast.Decl in
     let flat_ty_of_opt_ty ty_opt =
       match Option.map ~f:Ty.ty_of ty_opt with
-      | Some (TProd tys) -> tys
+      | Some (Type.Prod tys) -> tys
       | Some ty -> [ ty ]
       | _ -> []
     in
@@ -530,7 +467,9 @@ module Decl = struct
         |> Map.of_alist_exn (module Int)
       in
       let gen_vars = Map.data tvar_map in
-      let res_gen = TCon (ident, List.map ~f:(fun gen_var -> TGen gen_var) gen_vars) in
+      let res_gen =
+        Type.Con (ident, List.map ~f:(fun gen_var -> Type.Gen gen_var) gen_vars)
+      in
       let%map _, ctors, ctx =
         List.fold
           ctors
@@ -553,25 +492,24 @@ module Decl = struct
       Type (ident, gen_vars, List.rev ctors, tenv_entry), ctx
   ;;
 
-  let to_core (decl : t) =
-    let module N = Core_ast.Decl in
+  let clean (decl : t) =
+    let module N = Core_ast.Unified.Decl in
     match decl with
-    | Val (ident, expr, scheme) ->
-      N.Val (ident, Expr.to_core expr, scheme_of_scheme scheme)
+    | Val (ident, expr, scheme) -> N.Val (ident, Expr.clean expr, scheme_clean scheme)
     | Type (ident, tvars, ctors, tenv_entry) ->
       N.Type
         ( ident
         , tvars
         , List.map ctors ~f:(fun (ident, ty_opt, cenv_entry) ->
-            let (ctor_data : Core_ast.ctor_data) =
+            let (ctor_data : Core_ast.Unified.ctor_data) =
               { parent = cenv_entry.parent
               ; tag = cenv_entry.tag
               ; gen_vars = cenv_entry.gen_vars
-              ; arg_gens = List.map ~f:type_of_ty cenv_entry.arg_gens
-              ; res_gen = type_of_ty cenv_entry.res_gen
+              ; arg_gens = List.map ~f:ty_clean cenv_entry.arg_gens
+              ; res_gen = ty_clean cenv_entry.res_gen
               }
             in
-            ident, Option.map ~f:Ty.to_core ty_opt, ctor_data)
+            ident, Option.map ~f:Ty.clean ty_opt, ctor_data)
         , { arity = tenv_entry.arity; ctors = tenv_entry.ctors } )
   ;;
 end
@@ -597,20 +535,20 @@ module Prog = struct
     Decls (List.rev decls, ()), ctx
   ;;
 
-  let to_core (Decls (decls, ())) =
-    let module N = Core_ast.Prog in
-    N.Decls (List.map ~f:Decl.to_core decls, ())
+  let clean (Decls (decls, ())) =
+    let module N = Core_ast.Unified.Prog in
+    N.Decls (List.map ~f:Decl.clean decls, ())
   ;;
 end
 
-let typecheck_expr ctx rename expr = Expr.infer ctx rename expr >>| Expr.to_core
+let typecheck_expr ctx rename expr = Expr.infer ctx rename expr >>| Expr.clean
 
 let typecheck_decl ctx rename decl =
   let%map decl, ctx = Decl.infer ctx rename decl in
-  Decl.to_core decl, ctx
+  Decl.clean decl, ctx
 ;;
 
 let typecheck_prog ctx rename prog =
   let%map prog, ctx = Prog.infer ctx rename prog in
-  Prog.to_core prog, ctx
+  Prog.clean prog, ctx
 ;;
