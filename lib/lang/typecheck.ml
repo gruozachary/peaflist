@@ -360,10 +360,12 @@ module Expr = struct
     | O.Match (expr_scrutinee, arms, ()) ->
       let%bind expr_scrutinee = infer ctx rename expr_scrutinee in
       let ty = fresh_tu_ref ctx in
+      let ty_scrutinee = ty_of rename expr_scrutinee in
       let%map arms =
         List.fold arms ~init:(return []) ~f:(fun acc (pat, expr) ->
           let%bind arms_acc = acc in
           let%bind pat, env_inf = Pat.infer ctx rename pat in
+          let%bind () = unify (Pat.ty_of rename pat) ty_scrutinee in
           let%bind expr =
             infer { ctx with env = overwrite_merge ctx.env env_inf } rename expr
           in
