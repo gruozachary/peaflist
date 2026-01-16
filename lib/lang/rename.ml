@@ -3,19 +3,22 @@ open! Base
 module Renamer = struct
   type 'ident t =
     { create_ident : Monotonic.t -> string -> 'ident
-    ; mutable monotonic : Monotonic.t
+    ; monotonic : Monotonic.t ref
     ; map : (string, 'ident, String.comparator_witness) Map.t
     }
 
   let empty create_ident =
-    { create_ident; monotonic = Monotonic.zero; map = Map.empty (module String) }
+    { create_ident
+    ; monotonic = Ref.create Monotonic.zero
+    ; map = Map.empty (module String)
+    }
   ;;
 
   let spawn renamer = { renamer with map = Map.empty (module String) }
 
   let fresh ~str renamer =
-    let ident = renamer.create_ident renamer.monotonic str in
-    renamer.monotonic <- Monotonic.succ renamer.monotonic;
+    let ident = renamer.create_ident renamer.monotonic.contents str in
+    renamer.monotonic := Monotonic.succ renamer.monotonic.contents;
     ident
   ;;
 
