@@ -59,12 +59,12 @@ module Ident : sig
   val char : char Peasec.t
 end
 
-val expr : unit -> Lang.Raw.Expr.t Peasec.t
-val val_decl : Lang.Raw.Decl.t Peasec.t
+val expr : unit -> Lang.Parsed_ast.Expr.t Peasec.t
+val val_decl : Lang.Parsed_ast.Decl.t Peasec.t
 (* A peasec parser that parses a val decl *)
 
-val type_decl : Lang.Raw.Decl.t Peasec.t
+val type_decl : Lang.Parsed_ast.Decl.t Peasec.t
 (* A peasec parser that parses a type decl*)
 
-val prog : Lang.Raw.Decl.t list Peasec.t
+val prog : Lang.Parsed_ast.Prog.t Peasec.t
 (* A peasec parser that parses a Peaflist program  *)

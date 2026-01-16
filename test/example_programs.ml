@@ -1,30 +1,42 @@
 open! Base
-open! Lang.Raw
+open! Lang.Parsed_ast
 
 type program_bundle =
   { str : string
   ; ast : Prog.t
   }
 
-let empty = { str = ""; ast = [] }
+let empty = { str = ""; ast = Prog.Decls ([], ()) }
 
 let val_declaration =
   { str = "vd double := fun x -> x * x"
   ; ast =
-      [ Decl.ValDecl
-          ( "double"
-          , Expr.Lambda ("x", Expr.BinOp (Expr.Id "x", Expr.Bin_op.Mul, Expr.Id "x")) )
-      ]
+      Prog.Decls
+        ( [ Decl.Val
+              ( "double"
+              , Expr.Lambda
+                  ( "x"
+                  , Expr.BinOp (Expr.Ident ("x", ()), `Mul, Expr.Ident ("x", ()), ())
+                  , () )
+              , () )
+          ]
+        , () )
   }
 ;;
 
 let val_declaration_crazy_whitespace =
   { str = "     vd     double:=          fun                   x->x*         x"
   ; ast =
-      [ Decl.ValDecl
-          ( "double"
-          , Expr.Lambda ("x", Expr.BinOp (Expr.Id "x", Expr.Bin_op.Mul, Expr.Id "x")) )
-      ]
+      Prog.Decls
+        ( [ Decl.Val
+              ( "double"
+              , Expr.Lambda
+                  ( "x"
+                  , Expr.BinOp (Expr.Ident ("x", ()), `Mul, Expr.Ident ("x", ()), ())
+                  , () )
+              , () )
+          ]
+        , () )
   }
 ;;
 
@@ -36,7 +48,14 @@ td ('a) maybe :=
   | Nothing
         |}
   ; ast =
-      [ TypeDecl ("maybe", [ "'a" ], [ "Just", Some (Ty.Var "'a"); "Nothing", None ]) ]
+      Prog.Decls
+        ( [ Decl.Type
+              ( "maybe"
+              , [ "'a" ]
+              , [ "Just", Some (Ty.Var ("'a", ())), (); "Nothing", None, () ]
+              , () )
+          ]
+        , () )
   }
 ;;
 
@@ -53,26 +72,42 @@ vd length := fun l ->
     | Cons (x, xs) -> 1 + length xs
 |}
   ; ast =
-      [ TypeDecl
-          ( "list"
-          , [ "'a" ]
-          , [ "Cons", Some (Ty.Prod [ Ty.Var "'a"; Ty.Con ("list", [ Ty.Var "'a" ]) ])
-            ; "Nil", None
-            ] )
-      ; Decl.ValDecl
-          ( "length"
-          , Expr.Lambda
-              ( "l"
-              , Expr.Match
-                  ( Expr.Id "l"
-                  , [ Pat.CtorApp ("Nil", []), Expr.Int 0
-                    ; ( Pat.CtorApp ("Cons", [ Pat.Ident "x"; Pat.Ident "xs" ])
-                      , Expr.BinOp
-                          ( Expr.Int 1
-                          , Expr.Bin_op.Plus
-                          , Expr.Apply (Expr.Id "length", Expr.Id "xs") ) )
-                    ] ) ) )
-      ]
+      Prog.Decls
+        ( [ Decl.Type
+              ( "list"
+              , [ "'a" ]
+              , [ ( "Cons"
+                  , Some
+                      (Ty.Prod
+                         ( [ Ty.Var ("'a", ())
+                           ; Ty.Con ("list", [ Ty.Var ("'a", ()) ], ())
+                           ]
+                         , () ))
+                  , () )
+                ; "Nil", None, ()
+                ]
+              , () )
+          ; Decl.Val
+              ( "length"
+              , Expr.Lambda
+                  ( "l"
+                  , Expr.Match
+                      ( Expr.Ident ("l", ())
+                      , [ Pat.Constr ("Nil", [], ()), Expr.Int (0, ())
+                        ; ( Pat.Constr
+                              ("Cons", [ Pat.Ident ("x", ()); Pat.Ident ("xs", ()) ], ())
+                          , Expr.BinOp
+                              ( Expr.Int (1, ())
+                              , `Plus
+                              , Expr.Apply
+                                  (Expr.Ident ("length", ()), Expr.Ident ("xs", ()), ())
+                              , () ) )
+                        ]
+                      , () )
+                  , () )
+              , () )
+          ]
+        , () )
   }
 ;;
 
@@ -89,30 +124,48 @@ td ('a, 'b) test :=
   | A of ('a, 'b, int) tri option * char -> lol * int * long chain types -> ('a, 'b) result
 |}
   ; ast =
-      [ TypeDecl
-          ( "test"
-          , [ "'a"; "'b" ]
-          , [ ( "A"
-              , Some
-                  (Ty.Fun
-                     ( Ty.Prod
-                         [ Ty.Con
-                             ( "option"
-                             , [ Ty.Con
-                                   ( "tri"
-                                   , [ Ty.Var "'a"; Ty.Var "'b"; Ty.Con ("int", []) ] )
-                               ] )
-                         ; Ty.Con ("char", [])
-                         ]
-                     , Ty.Fun
+      Prog.Decls
+        ( [ Decl.Type
+              ( "test"
+              , [ "'a"; "'b" ]
+              , [ ( "A"
+                  , Some
+                      (Ty.Fun
                          ( Ty.Prod
-                             [ Ty.Con ("lol", [])
-                             ; Ty.Con ("int", [])
-                             ; Ty.Con
-                                 ("types", [ Ty.Con ("chain", [ Ty.Con ("long", []) ]) ])
-                             ]
-                         , Ty.Con ("result", [ Ty.Var "'a"; Ty.Var "'b" ]) ) )) )
-            ] )
-      ]
+                             ( [ Ty.Con
+                                   ( "option"
+                                   , [ Ty.Con
+                                         ( "tri"
+                                         , [ Ty.Var ("'a", ())
+                                           ; Ty.Var ("'b", ())
+                                           ; Ty.Con ("int", [], ())
+                                           ]
+                                         , () )
+                                     ]
+                                   , () )
+                               ; Ty.Con ("char", [], ())
+                               ]
+                             , () )
+                         , Ty.Fun
+                             ( Ty.Prod
+                                 ( [ Ty.Con ("lol", [], ())
+                                   ; Ty.Con ("int", [], ())
+                                   ; Ty.Con
+                                       ( "types"
+                                       , [ Ty.Con
+                                             ("chain", [ Ty.Con ("long", [], ()) ], ())
+                                         ]
+                                       , () )
+                                   ]
+                                 , () )
+                             , Ty.Con
+                                 ("result", [ Ty.Var ("'a", ()); Ty.Var ("'b", ()) ], ())
+                             , () )
+                         , () ))
+                  , () )
+                ]
+              , () )
+          ]
+        , () )
   }
 ;;
