@@ -41,6 +41,69 @@ end
 open Ast
 open Result.Let_syntax
 
+module Compilation = struct
+  type ctor_tag = int
+  type pattern = Pat.t
+  type action = Expr.t
+  type row = pattern list * action
+  type matrix = row list
+
+  type tree =
+    | Fail
+    | Leaf of action
+    | Swap of int * tree
+    | Switch of (ctor_tag * tree) list
+
+  let is_pat_wildcard : pattern -> bool = function
+    | Core_ast.Unified.Pat.Ident _ -> true
+    | _ -> false
+  ;;
+
+  let all_pats_wildcard : row -> bool =
+    fun (pats, _) -> List.for_all ~f:is_pat_wildcard pats
+  ;;
+
+  let find_column : matrix -> int =
+    fun mat ->
+    match mat with
+    | [] -> assert false
+    | (pats, _) :: _ ->
+      List.find_mapi_exn pats ~f:(fun ix pat ->
+        if is_pat_wildcard pat then None else Some ix)
+  ;;
+
+  let swap_to_front_row : int -> row -> row =
+    fun i (pats, action) ->
+    let xs, ys = List.split_n pats i in
+    if equal_int i 1
+    then pats, action
+    else List.append (List.last_exn xs :: List.drop_last_exn xs) ys, action
+  ;;
+
+  let swap_to_front : int -> matrix -> matrix =
+    fun ix mat -> List.map ~f:(swap_to_front_row ix) mat
+  ;;
+
+  let rec compile_match : matrix -> tree = function
+    | [] -> Fail
+    | ((_, action) as row) :: _ when all_pats_wildcard row -> Leaf action
+    | mat ->
+      let col_index = find_column mat in
+      let transform_node, mat =
+        if equal_int col_index 0
+        then (fun t -> Swap (col_index, t)), swap_to_front col_index mat
+        else (fun t -> t), mat
+      in
+      let zipped =
+        List.zip_exn
+          (List.map ~f:(fun (pats, _) -> List.hd_exn pats |> get_ctor_id) mat)
+          (specialise_front mat)
+      in
+      transform_node (Switch zipped)
+
+  and specialise_front : matrix -> tree list = _
+end
+
 let rec convert_expr : Core_ast.Unified.Expr.t -> (Expr.t, string) Result.t =
   let module O = Core_ast.Unified.Expr in
   let open Expr in
