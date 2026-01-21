@@ -41,10 +41,16 @@ end
 open Ast
 open Result.Let_syntax
 
+type ctx =
+  { tenv : (Type_ident.t, Core_ast.Unified.type_data, Type_ident.comparator_witness) Map.t
+  ; cenv :
+      (Constr_ident.t, Core_ast.Unified.ctor_data, Constr_ident.comparator_witness) Map.t
+  }
+
 module Compilation = struct
   type ctor_tag = int
-  type pattern = Pat.t
-  type action = Expr.t
+  type pattern = Core_ast.Unified.Pat.t
+  type action = Core_ast.Unified.Expr.t
   type row = pattern list * action
   type matrix = row list
 
@@ -52,7 +58,7 @@ module Compilation = struct
     | Fail
     | Leaf of action
     | Swap of int * tree
-    | Switch of (ctor_tag * tree) list
+    | Switch of (ctor_tag * tree) list * tree option
 
   let is_pat_wildcard : pattern -> bool = function
     | Core_ast.Unified.Pat.Ident _ -> true
@@ -94,69 +100,93 @@ module Compilation = struct
         then (fun t -> Swap (col_index, t)), swap_to_front col_index mat
         else (fun t -> t), mat
       in
-      let zipped =
-        List.zip_exn
-          (List.map ~f:(fun (pats, _) -> List.hd_exn pats |> get_ctor_id) mat)
-          (specialise_front mat)
+      let specialised =
+        List.map mat ~f:(fun (pats, _) ->
+          let pat = List.hd_exn pats in
+          get_ctor_tag pat, specialise mat pat)
       in
-      transform_node (Switch zipped)
+      transform_node (Switch (specialised, _))
 
-  and specialise_front : matrix -> tree list = _
+  and specialise : matrix -> pattern -> tree =
+    fun mat pat ->
+    let ctor_tag = get_ctor_tag pat in
+    let mat_s =
+      List.filter mat ~f:(fun (pats, _) -> equal_int (List.hd_exn pats) ctor_tag)
+      |> List.map ~f:(fun (pats, action) ->
+        let prefix =
+          match List.hd_exn pats with
+          | Core_ast.Unified.Pat.Int _ -> [ pat ]
+          | Core_ast.Unified.Pat.Ident _ -> [ pat ]
+          | Core_ast.Unified.Pat.Tuple (pats, _) -> pats
+          | Core_ast.Unified.Pat.Constr (_, pats, _) -> pats
+        in
+        List.append prefix (List.tl_exn pats), action)
+    in
+    compile_match mat_s
+  ;;
 end
 
-let rec convert_expr : Core_ast.Unified.Expr.t -> (Expr.t, string) Result.t =
+let rec convert_expr : ctx -> Core_ast.Unified.Expr.t -> (Expr.t, string) Result.t =
+  fun ctx ->
   let module O = Core_ast.Unified.Expr in
   let open Expr in
   let convert_exprs exprs =
     let%map exprs =
       List.fold_result exprs ~init:[] ~f:(fun acc expr ->
-        let%map expr = convert_expr expr in
+        let%map expr = convert_expr ctx expr in
         expr :: acc)
     in
     List.rev exprs
   in
-  fun expr ->
-    match expr with
-    | O.Int (x, _) -> return (Int x)
-    | O.Ident (ident, ty) -> return (Ident (ident, ty))
-    | O.Constr (ident, exprs, ty) ->
-      let%map exprs = convert_exprs exprs in
-      Constr (ident, exprs, ty)
-    | O.Apply (expr_fun, expr_arg, ty) ->
-      let%bind expr_fun = convert_expr expr_fun in
-      let%map expr_arg = convert_expr expr_arg in
-      Apply (expr_fun, expr_arg, ty)
-    | O.Lambda (ident, expr_body, ty) ->
-      let%map expr_body = convert_expr expr_body in
-      Lambda (ident, expr_body, ty)
-    | O.Let (ident, expr_binding, expr_body, scheme) ->
-      let%bind expr_binding = convert_expr expr_binding in
-      let%map expr_body = convert_expr expr_body in
-      Let (ident, expr_binding, expr_body, scheme)
-    | O.Match (expr_scrutinee, arms, ty) -> _
-    | O.Tuple (exprs, ty) ->
-      let%map exprs = convert_exprs exprs in
-      Tuple (exprs, ty)
-    | _ -> .
+  function
+  | O.Int (x, _) -> return (Int x)
+  | O.Ident (ident, ty) -> return (Ident (ident, ty))
+  | O.Constr (ident, exprs, ty) ->
+    let%map exprs = convert_exprs exprs in
+    Constr (ident, exprs, ty)
+  | O.Apply (expr_fun, expr_arg, ty) ->
+    let%bind expr_fun = convert_expr ctx expr_fun in
+    let%map expr_arg = convert_expr ctx expr_arg in
+    Apply (expr_fun, expr_arg, ty)
+  | O.Lambda (ident, expr_body, ty) ->
+    let%map expr_body = convert_expr ctx expr_body in
+    Lambda (ident, expr_body, ty)
+  | O.Let (ident, expr_binding, expr_body, scheme) ->
+    let%bind expr_binding = convert_expr ctx expr_binding in
+    let%map expr_body = convert_expr ctx expr_body in
+    Let (ident, expr_binding, expr_body, scheme)
+  | O.Match (expr_scrutinee, arms, ty) -> _
+  | O.Tuple (exprs, ty) ->
+    let%map exprs = convert_exprs exprs in
+    Tuple (exprs, ty)
+  | _ -> .
 ;;
 
-let convert_decl : Core_ast.Unified.Decl.t -> (Decl.t, string) Result.t = function
+let convert_decl : ctx -> Core_ast.Unified.Decl.t -> (Decl.t * ctx, string) Result.t =
+  fun ctx -> function
   | Core_ast.Unified.Decl.Val (ident, expr, scheme) ->
-    let%map expr = convert_expr expr in
-    Decl.Val (ident, expr, scheme)
+    let%map expr = convert_expr ctx expr in
+    Decl.Val (ident, expr, scheme), ctx
   | Core_ast.Unified.Decl.Type (ident, gen_vars, ctors, type_data) ->
-    return (Decl.Type (ident, gen_vars, ctors, type_data))
+    let tenv = Map.set ctx.tenv ~key:ident ~data:type_data in
+    let cenv =
+      List.fold
+        ~init:ctx.cenv
+        ~f:(fun cenv (ident_c, _, ctor_data) -> Map.set cenv ~key:ident_c ~data:ctor_data)
+        ctors
+    in
+    return (Decl.Type (ident, gen_vars, ctors, type_data), { tenv; cenv })
 ;;
 
-let convert_prog : Core_ast.Unified.Prog.t -> (Prog.t, string) Result.t =
-  fun (Core_ast.Unified.Prog.Decls (decls, ())) ->
-  let%map decls =
+let convert_prog : ctx -> Core_ast.Unified.Prog.t -> (Prog.t * ctx, string) Result.t =
+  fun ctx (Core_ast.Unified.Prog.Decls (decls, ())) ->
+  let%map decls, ctx =
     List.fold_result
-      ~init:[]
-      ~f:(fun acc decl ->
-        let%map decl = convert_decl decl in
-        decl :: acc)
+      ~init:([], ctx)
+      ~f:(fun (decls_acc, ctx) decl ->
+        let%map decl, ctx = convert_decl ctx decl in
+        decl :: decls_acc, ctx)
       decls
   in
-  Prog.Decls (List.rev decls, ())
+  Prog.Decls (List.rev decls, ()), ctx
 ;;
