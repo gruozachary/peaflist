@@ -9,91 +9,29 @@ on:
 jobs:
   build-deps:
     runs-on: ubuntu-latest
-
-    container:
-      image: ocaml/opam
-      options: --user 0
-
     steps:
       - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
 
-      - name: Cache opam switch
-        uses: actions/cache@v4
-        with:
-          path: _opam
-          key: opam-${{ runner.os }}-${{ hashFiles('*.opam') }}
-
-      - name: Give workspace to opam user
-        run: chown -R opam:opam "$GITHUB_WORKSPACE"
-
-      - name: Set up switch
-        env:
-          HOME: /home/opam
-        run: |
-          [ -d '_opam' ] || su -s /bin/bash opam -c '
-            opam switch create . ocaml-base-compiler.5.3.0 --deps-only -y && opam install ocamlformat
-          '
+      - run: nix develop --command dune build
 
   format-check:
     needs: build-deps
     runs-on: ubuntu-latest
 
-    container:
-      image: ocaml/opam
-      options: --user 0
-    
     steps:
       - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
 
-      - name: Cache opam switch
-        uses: actions/cache@v4
-        with:
-          path: _opam
-          key: opam-${{ runner.os }}-${{ hashFiles('*.opam') }}
-
-      - name: Give workspace to opam user
-        run: chown -R opam:opam "$GITHUB_WORKSPACE"
-
-      - name: Run formatter
-        env:
-          HOME: /home/opam
-        run: |
-          su -s /bin/bash opam -c '
-            opam exec -- dune fmt
-          '
-
-      - name: Check diff
-        env:
-          HOME: /home/opam
-        run: |
-          su -s /bin/bash opam -c '
-            git diff --quiet
-          '
+      - run: nix develop --command dune build
+      - run: git diff --quiet
 
   run-tests:
     needs: build-deps
     runs-on: ubuntu-latest
 
-    container:
-      image: ocaml/opam
-      options: --user 0
-    
     steps:
       - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
 
-      - name: Cache opam switch
-        uses: actions/cache@v4
-        with:
-          path: _opam
-          key: opam-${{ runner.os }}-${{ hashFiles('*.opam') }}
-
-      - name: Give workspace to opam user
-        run: chown -R opam:opam "$GITHUB_WORKSPACE"
-
-      - name: Run tests
-        env:
-          HOME: /home/opam
-        run: |
-          su -s /bin/bash opam -c '
-            opam exec -- dune runtest
-          '
+      - run: nix develop --command dune test
