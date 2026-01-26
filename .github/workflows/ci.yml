@@ -25,8 +25,7 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v21
       - uses: DeterminateSystems/magic-nix-cache-action@v13
 
-      - run: nix develop --command dune build
-      - run: git diff --quiet
+      - run: nix develop --command "dune build && git diff --quiet"
 
   run-tests:
     needs: build-deps
