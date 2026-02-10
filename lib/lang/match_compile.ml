@@ -54,12 +54,33 @@ module Compilation = struct
   type row = pattern list * action
   type matrix = row list
 
-  let get_ctor_tag : ctx -> pattern -> int =
+  module Tag = struct
+    module T = struct
+      type t =
+        | Ctor of int
+        | Wildcard
+      [@@deriving compare, sexp_of]
+    end
+
+    include T
+    include Comparable.Make (T)
+  end
+
+  open Tag
+
+  let get_ctor_tag : ctx -> pattern -> Tag.t =
     fun ctx -> function
-    | Int (x, _) -> x
-    | Ident (_, _) -> _
-    | Tuple (_, _) -> _
-    | Constr (ident, _, _) -> (Map.find_exn ctx.cenv ident).tag
+    | Int (x, _) -> Ctor x
+    | Ident (_, _) -> Wildcard
+    | Tuple (_, _) -> Ctor 0
+    | Constr (ident, _, _) -> Ctor (Map.find_exn ctx.cenv ident).tag
+  ;;
+
+  let get_ctor_multiplicity : pattern -> int = function
+    | Int (_, _) -> 1
+    | Ident (_, _) -> 0
+    | Tuple (pats, _) -> List.length pats
+    | Constr (_, pats, _) -> List.length pats
   ;;
 
   type tree =
@@ -98,40 +119,79 @@ module Compilation = struct
     fun ix mat -> List.map ~f:(swap_to_front_row ix) mat
   ;;
 
-  let rec compile_match : ctx -> matrix -> tree =
-    fun ctx -> function
-    | [] -> Fail
-    | ((_, action) as row) :: _ when all_pats_wildcard row -> Leaf action
-    | mat ->
-      let col_index = find_column mat in
-      let transform_node, mat =
-        if equal_int col_index 0
-        then (fun t -> t), mat
-        else (fun t -> Swap (col_index, t)), swap_to_front col_index mat
-      in
-      let specialised =
-        List.map mat ~f:(fun (pats, _) ->
-          let pat = List.hd_exn pats in
-          get_ctor_tag ctx pat, specialise ctx mat pat)
-      in
-      transform_node (Switch (specialised, _))
+  let rec repeat : int -> 'a -> 'a list =
+    fun i e -> if Int.( < ) i 1 then [] else e :: repeat (i - 1) e
+  ;;
 
-  and specialise : ctx -> matrix -> pattern -> tree =
-    fun ctx mat pat ->
-    let ctor_tag = get_ctor_tag ctx pat in
-    let mat_s =
-      List.filter mat ~f:(fun (pats, _) -> equal_int (List.hd_exn pats |> get_ctor_tag ctx) ctor_tag)
-      |> List.map ~f:(fun (pats, action) ->
-        let prefix =
-          match List.hd_exn pats with
-          | Core_ast.Unified.Pat.Int _ -> [ pat ]
-          | Core_ast.Unified.Pat.Ident _ -> [ pat ]
-          | Core_ast.Unified.Pat.Tuple (pats, _) -> pats
-          | Core_ast.Unified.Pat.Constr (_, pats, _) -> pats
+  let rec compile_match : ctx -> matrix -> tree =
+    fun ctx ->
+    let group : matrix -> (int list * int * int) list =
+      fun mat ->
+      let tags =
+        List.map
+          ~f:(fun (pats, _) ->
+            let pat = List.hd_exn pats in
+            pat, get_ctor_tag ctx pat)
+          mat
+      in
+      let unique_tags =
+        List.filter_map tags ~f:(fun (_, tag) ->
+          match tag with
+          | Wildcard -> None
+          | x -> Some x)
+        |> List.stable_dedup ~compare:(fun x y ->
+          match x, y with
+          | Ctor x, Ctor y when equal_int x y -> 0
+          | _ -> 1)
+      in
+      List.map unique_tags ~f:(fun target_tag ->
+        let indices, multiplicities =
+          List.filter_mapi tags ~f:(fun i (pat, tag) ->
+            match target_tag, tag with
+            | Ctor x, Ctor y when equal_int x y -> Some (i, get_ctor_multiplicity pat)
+            | Ctor _, Wildcard -> Some (i, get_ctor_multiplicity pat)
+            | _ -> None)
+          |> List.unzip
         in
-        List.append prefix (List.tl_exn pats), action)
+        let multiplicity =
+          List.max_elt multiplicities ~compare:compare_int |> Option.value_exn
+        in
+        ( indices
+        , multiplicity
+        , match target_tag with
+          | Ctor x -> x
+          | _ -> assert false ))
     in
-    compile_match ctx mat_s
+    fun mat ->
+      match mat with
+      | [] -> Fail
+      | ((_, action) as row) :: _ when all_pats_wildcard row -> Leaf action
+      | _ ->
+        let col_index = find_column mat in
+        let transform_node, mat =
+          if equal_int col_index 0
+          then (fun t -> t), mat
+          else (fun t -> Swap (col_index, t)), swap_to_front col_index mat
+        in
+        let specialised = group mat |> List.map ~f:(specialise ctx mat) in
+        transform_node (Switch (specialised, _))
+
+  and specialise : ctx -> matrix -> int list * int * int -> ctor_tag * tree =
+    fun ctx mat (indices, multiplicity, tag) ->
+    let mat_s =
+      List.map indices ~f:(fun ix ->
+        let pats, action = List.nth_exn mat ix in
+        let head = List.hd_exn pats in
+        let prefix =
+          match head with
+          | Int (_, _) -> []
+          | Ident (_, _) -> repeat multiplicity head
+          | Tuple (pats, _) -> pats
+          | Constr (_, pats, _) -> pats
+        in
+        List.tl_exn pats |> List.append prefix, action)
+    in
+    tag, compile_match ctx mat_s
   ;;
 end
 
