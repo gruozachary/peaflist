@@ -54,6 +54,14 @@ module Compilation = struct
   type row = pattern list * action
   type matrix = row list
 
+  let get_ctor_tag : ctx -> pattern -> int =
+    fun ctx -> function
+    | Int (x, _) -> x
+    | Ident (_, _) -> _
+    | Tuple (_, _) -> _
+    | Constr (ident, _, _) -> (Map.find_exn ctx.cenv ident).tag
+  ;;
+
   type tree =
     | Fail
     | Leaf of action
@@ -90,28 +98,29 @@ module Compilation = struct
     fun ix mat -> List.map ~f:(swap_to_front_row ix) mat
   ;;
 
-  let rec compile_match : matrix -> tree = function
+  let rec compile_match : ctx -> matrix -> tree =
+    fun ctx -> function
     | [] -> Fail
     | ((_, action) as row) :: _ when all_pats_wildcard row -> Leaf action
     | mat ->
       let col_index = find_column mat in
       let transform_node, mat =
         if equal_int col_index 0
-        then (fun t -> Swap (col_index, t)), swap_to_front col_index mat
-        else (fun t -> t), mat
+        then (fun t -> t), mat
+        else (fun t -> Swap (col_index, t)), swap_to_front col_index mat
       in
       let specialised =
         List.map mat ~f:(fun (pats, _) ->
           let pat = List.hd_exn pats in
-          get_ctor_tag pat, specialise mat pat)
+          get_ctor_tag ctx pat, specialise ctx mat pat)
       in
       transform_node (Switch (specialised, _))
 
-  and specialise : matrix -> pattern -> tree =
-    fun mat pat ->
-    let ctor_tag = get_ctor_tag pat in
+  and specialise : ctx -> matrix -> pattern -> tree =
+    fun ctx mat pat ->
+    let ctor_tag = get_ctor_tag ctx pat in
     let mat_s =
-      List.filter mat ~f:(fun (pats, _) -> equal_int (List.hd_exn pats) ctor_tag)
+      List.filter mat ~f:(fun (pats, _) -> equal_int (List.hd_exn pats |> get_ctor_tag ctx) ctor_tag)
       |> List.map ~f:(fun (pats, action) ->
         let prefix =
           match List.hd_exn pats with
@@ -122,7 +131,7 @@ module Compilation = struct
         in
         List.append prefix (List.tl_exn pats), action)
     in
-    compile_match mat_s
+    compile_match ctx mat_s
   ;;
 end
 
