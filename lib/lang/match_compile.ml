@@ -174,7 +174,7 @@ module Compilation = struct
           else (fun t -> Swap (col_index, t)), swap_to_front col_index mat
         in
         let specialised = group mat |> List.map ~f:(specialise ctx mat) in
-        transform_node (Switch (specialised, _))
+        transform_node (Switch (specialised, make_default ctx mat))
 
   and specialise : ctx -> matrix -> int list * int * int -> ctor_tag * tree =
     fun ctx mat (indices, multiplicity, tag) ->
@@ -192,6 +192,18 @@ module Compilation = struct
         List.tl_exn pats |> List.append prefix, action)
     in
     tag, compile_match ctx mat_s
+
+  and make_default : ctx -> matrix -> tree option =
+    fun ctx mat ->
+    let default =
+      List.filter_map mat ~f:(fun (pats, action) ->
+        if List.hd_exn pats |> is_pat_wildcard
+        then Some (List.tl_exn pats, action)
+        else None)
+    in
+    match default with
+    | [] -> None
+    | _ -> Some (compile_match ctx default)
   ;;
 end
 
