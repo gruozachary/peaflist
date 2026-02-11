@@ -73,6 +73,20 @@ module Compilation = struct
     include Comparable.Make (T)
   end
 
+  module Occurrence = struct
+    type t =
+      | Root
+      | Path of int * t
+  end
+
+  module Tree = struct
+    type t =
+      | Leaf of Core_ast.Unified.Expr.t
+      | Fail
+      | Switch of (int * t) list * t option * Occurrence.t
+      | Swap of t * int
+  end
+
   module Matrix = struct
     type row =
       { patterns : Pattern.t list
@@ -80,6 +94,10 @@ module Compilation = struct
       }
 
     type t = row list
+
+    let row_all_wildcards : row -> bool =
+      fun { patterns; _ } -> List.for_all patterns ~f:Pattern.is_wildcard
+    ;;
 
     let find_good_column : t -> int =
       fun mat ->
@@ -90,7 +108,32 @@ module Compilation = struct
           if Pattern.is_wildcard pat then None else Some ix)
         |> Option.value ~default:0
     ;;
+
+    let swap_col_to_front : int -> t -> t =
+      let swap_row : int -> row -> row =
+        fun i row ->
+        let xs, ys = List.split_n row.patterns i in
+        { row with patterns = List.hd_exn ys :: xs |> List.append (List.tl_exn ys) }
+      in
+      fun i mat -> List.map ~f:(swap_row i) mat
+    ;;
   end
+
+  let compile : Matrix.t -> Occurrence.t list -> Tree.t =
+    let swap_oc_to_front : int -> Occurrence.t list -> Occurrence.t list =
+      fun i ocs ->
+      let xs, ys = List.split_n ocs i in
+      List.hd_exn ys :: xs |> List.append (List.tl_exn ys)
+    in
+    fun mat ocs ->
+      match mat with
+      | [] -> Tree.Fail
+      | row :: _ when Matrix.row_all_wildcards row -> _
+      | _ ->
+        let selected_col = Matrix.find_good_column mat in
+        let mat = Matrix.swap_col_to_front selected_col mat in
+        let ocs=  swap_oc_to_front selected_col ocs in _
+  ;;
 end
 
 let rec convert_expr : ctx -> Core_ast.Unified.Expr.t -> (Expr.t, string) Result.t =
