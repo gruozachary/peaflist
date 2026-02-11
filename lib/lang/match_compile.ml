@@ -13,7 +13,7 @@ module Ast = struct
       | Tuple of t List.t * Type.unified_t
       | GetTag of Var_ident.t
       | GetField of Var_ident.t * int
-      | Switch of t * (int * t) * t option * Type.unified_t
+      | Switch of t * (int * t) list * t option * Type.unified_t
   end
 
   module Ty = Core_ast.Unified.Ty
@@ -77,7 +77,7 @@ module Compilation = struct
   ;;
 
   let get_ctor_multiplicity : pattern -> int = function
-    | Int (_, _) -> 1
+    | Int (_, _) -> 0
     | Ident (_, _) -> 0
     | Tuple (pats, _) -> List.length pats
     | Constr (_, pats, _) -> List.length pats
@@ -110,9 +110,7 @@ module Compilation = struct
   let swap_to_front_row : int -> row -> row =
     fun i (pats, action) ->
     let xs, ys = List.split_n pats i in
-    if equal_int i 1
-    then pats, action
-    else List.append (List.last_exn xs :: List.drop_last_exn xs) ys, action
+    List.append (List.hd_exn ys :: xs) (List.tl_exn ys), action
   ;;
 
   let swap_to_front : int -> matrix -> matrix =
@@ -141,8 +139,10 @@ module Compilation = struct
           | x -> Some x)
         |> List.stable_dedup ~compare:(fun x y ->
           match x, y with
-          | Ctor x, Ctor y when equal_int x y -> 0
-          | _ -> 1)
+          | Ctor x, Ctor y -> compare_int x y
+          | Ctor _, Wildcard -> -1
+          | Wildcard, Ctor _ -> 1
+          | Wildcard, Wildcard -> 0)
       in
       List.map unique_tags ~f:(fun target_tag ->
         let indices, multiplicities =
