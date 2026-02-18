@@ -64,7 +64,7 @@ module Compilation = struct
   module Pattern = struct
     module T = struct
       type t =
-        | Ctor of Ctor.t
+        | Ctor of Ctor.t * t list
         | Wildcard
       [@@deriving compare, sexp_of]
 
@@ -129,10 +129,28 @@ module Compilation = struct
       let fetch_head : row -> (Ctor.t, Ctor.comparator_witness) Set.t =
         fun { patterns; _ } ->
         match List.hd_exn patterns with
-        | Pattern.Ctor ctor -> Set.singleton (module Ctor) ctor
+        | Pattern.Ctor (ctor, _) -> Set.singleton (module Ctor) ctor
         | _ -> Set.empty (module Ctor)
       in
       fun mat -> List.map mat ~f:fetch_head |> Set.union_list (module Ctor)
+    ;;
+
+    let specialise : t -> Ctor.t -> t =
+      fun mat ctor ->
+      mat
+      |> List.filter_map ~f:(fun row ->
+        let pat_hd, pats_tl = List.hd_exn row.patterns, List.tl_exn row.patterns in
+        match pat_hd with
+        | Pattern.Ctor (ctor', ctor_pats) when Ctor.equal ctor ctor' ->
+          Some { row with patterns = List.append ctor_pats pats_tl }
+        | Pattern.Wildcard ->
+          let pats_hd =
+            Sequence.unfold ~init:ctor.multiplicity ~f:(fun i ->
+              if i > 0 then Some (Pattern.Wildcard, i - 1) else None)
+            |> Sequence.to_list
+          in
+          Some { row with patterns = List.append pats_hd pats_tl }
+        | _ -> None)
     ;;
   end
 
@@ -142,7 +160,6 @@ module Compilation = struct
       let xs, ys = List.split_n ocs i in
       List.hd_exn ys :: xs |> List.append (List.tl_exn ys)
     in
-    let specialise : Matrix.t -> Ctor.t -> Matrix.t = _ in
     fun ocs mat ->
       match mat with
       | [] -> Tree.Fail
@@ -157,7 +174,7 @@ module Compilation = struct
           ctors
           |> Set.to_list
           |> List.map ~f:(fun ctor ->
-            let mat = specialise mat ctor in
+            let mat = Matrix.specialise mat ctor in
             let ocs_hd =
               Sequence.unfold ~init:1 ~f:(fun i ->
                 if i <= ctor.multiplicity
