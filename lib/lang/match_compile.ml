@@ -48,16 +48,23 @@ type ctx =
   }
 
 module Compilation = struct
-  module Pattern = struct
+  module Ctor = struct
     module T = struct
-      type ctor_data =
+      type t =
         { tag : int
         ; multiplicity : int
         }
       [@@deriving compare, sexp_of]
+    end
 
+    include T
+    include Comparable.Make (T)
+  end
+
+  module Pattern = struct
+    module T = struct
       type t =
-        | Ctor of ctor_data
+        | Ctor of Ctor.t
         | Wildcard
       [@@deriving compare, sexp_of]
 
@@ -117,22 +124,51 @@ module Compilation = struct
       in
       fun i mat -> List.map ~f:(swap_row i) mat
     ;;
+
+    let head_ctors : t -> (Ctor.t, Ctor.comparator_witness) Set.t =
+      let fetch_head : row -> (Ctor.t, Ctor.comparator_witness) Set.t =
+        fun { patterns; _ } ->
+        match List.hd_exn patterns with
+        | Pattern.Ctor ctor -> Set.singleton (module Ctor) ctor
+        | _ -> Set.empty (module Ctor)
+      in
+      fun mat -> List.map mat ~f:fetch_head |> Set.union_list (module Ctor)
+    ;;
   end
 
-  let compile : Matrix.t -> Occurrence.t list -> Tree.t =
+  let rec compile : Occurrence.t list -> Matrix.t -> Tree.t =
     let swap_oc_to_front : int -> Occurrence.t list -> Occurrence.t list =
       fun i ocs ->
       let xs, ys = List.split_n ocs i in
       List.hd_exn ys :: xs |> List.append (List.tl_exn ys)
     in
-    fun mat ocs ->
+    let specialise : Matrix.t -> Ctor.t -> Matrix.t = _ in
+    fun ocs mat ->
       match mat with
       | [] -> Tree.Fail
-      | row :: _ when Matrix.row_all_wildcards row -> _
+      | row :: _ when Matrix.row_all_wildcards row -> Tree.Leaf row.action
       | _ ->
         let selected_col = Matrix.find_good_column mat in
         let mat = Matrix.swap_col_to_front selected_col mat in
-        let ocs=  swap_oc_to_front selected_col ocs in _
+        let ocs = swap_oc_to_front selected_col ocs in
+        let oc_hd, ocs_tl = List.hd_exn ocs, List.tl_exn ocs in
+        let ctors = Matrix.head_ctors mat in
+        let subtrees =
+          ctors
+          |> Set.to_list
+          |> List.map ~f:(fun ctor ->
+            let mat = specialise mat ctor in
+            let ocs_hd =
+              Sequence.unfold ~init:1 ~f:(fun i ->
+                if i <= ctor.multiplicity
+                then Some (Occurrence.Path (i, oc_hd), i + 1)
+                else None)
+              |> Sequence.to_list
+            in
+            ctor.tag, compile (List.append ocs_hd ocs_tl) mat)
+        in
+        (* TODO: Default matrix *)
+        Tree.Switch (subtrees, None, oc_hd)
   ;;
 end
 
