@@ -22,7 +22,7 @@ module Ast = struct
       | None -> raise_s [%message "Internal compiler error: Unknown type"]
     ;;
 
-    let rec ty_of : Rename.t -> t -> Type.phantom_unified Type.t=
+    let rec ty_of : Rename.t -> t -> Type.phantom_unified Type.t =
       fun rename expr ->
       match expr with
       | Int _ -> get_int rename
@@ -69,6 +69,10 @@ type ctx =
   ; cenv :
       (Constr_ident.t, Core_ast.Unified.ctor_data, Constr_ident.comparator_witness) Map.t
   }
+
+let empty : unit -> ctx = fun () ->
+  { tenv = Map.empty (module Type_ident); cenv = Map.empty (module Constr_ident) }
+;;
 
 module Compilation = struct
   module Ctor = struct

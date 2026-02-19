@@ -93,6 +93,7 @@ end
 type t =
   { rename_ctx : Lang.Rename.t
   ; typecheck_ctx : Lang.Typecheck.ctx
+  ; match_compile_ctx : Lang.Match_compile.ctx
   }
 
 type run_output =
@@ -133,25 +134,32 @@ let run ctx =
   | Line.Expr expr ->
     let%bind expr = Lang.Rename.rename_expr ctx.rename_ctx expr in
     let expr = Lang.Desugar.desugar_expr ctx.rename_ctx expr in
-    let%map _, scheme =
+    let%bind expr, scheme =
       Lang.Typecheck.typecheck_expr ctx.typecheck_ctx ctx.rename_ctx expr
+    in
+    let%map _ =
+      Lang.Match_compile.convert_expr ctx.rename_ctx ctx.match_compile_ctx expr
     in
     Lang.Typing.Scheme.to_string scheme |> Stdio.print_endline;
     { ctx; should_quit = false }
   | Line.Decl decl ->
     let%bind decl, rename_ctx = Lang.Rename.rename_decl ctx.rename_ctx decl in
     let decl = Lang.Desugar.desugar_decl ctx.rename_ctx decl in
-    let%map _, typecheck_ctx =
+    let%bind decl, typecheck_ctx =
       Lang.Typecheck.typecheck_decl ctx.typecheck_ctx ctx.rename_ctx decl
     in
-    { ctx = { typecheck_ctx; rename_ctx }; should_quit = false }
+    let%map _, match_compile_ctx =
+      Lang.Match_compile.convert_decl ctx.rename_ctx ctx.match_compile_ctx decl
+    in
+    { ctx = { typecheck_ctx; rename_ctx; match_compile_ctx }; should_quit = false }
   | Line.Command cmd -> handle_command ctx cmd
 ;;
 
 let loop () =
   let rename_ctx = Lang.Rename.basic () in
   let typecheck_ctx = Lang.Typecheck.basic rename_ctx in
-  let ctx = { rename_ctx; typecheck_ctx } in
+  let match_compile_ctx = Lang.Match_compile.empty () in
+  let ctx = { rename_ctx; typecheck_ctx; match_compile_ctx } in
   let rec go ctx =
     match run ctx with
     | Result.Ok { should_quit = true; _ } -> ()
