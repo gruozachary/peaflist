@@ -76,7 +76,7 @@ module Compilation = struct
       ;;
 
       let of_pat : ctx -> Core_ast.Unified.Pat.t -> t =
-        fun { cenv; _; }->
+        fun { cenv; _ } ->
         let rec go =
           fun pat ->
           match pat with
@@ -87,7 +87,9 @@ module Compilation = struct
             Ctor ({ tag = 0; multiplicity = List.length pats }, pats |> List.map ~f:go)
           | Core_ast.Unified.Pat.Constr (ident, pats, _) ->
             let ctor_data = Map.find_exn cenv ident in
-            Ctor ({ tag = ctor_data.tag; multiplicity = List.length pats }, pats |> List.map ~f:go)
+            Ctor
+              ( { tag = ctor_data.tag; multiplicity = List.length pats }
+              , pats |> List.map ~f:go )
         in
         go
       ;;
@@ -105,7 +107,7 @@ module Compilation = struct
 
   module Tree = struct
     type t =
-      | Leaf of Core_ast.Unified.Expr.t
+      | Leaf of Expr.t
       | Fail
       | Switch of (int * t) list * t option * Occurrence.t
       | Swap of t * int
@@ -114,7 +116,7 @@ module Compilation = struct
   module Matrix = struct
     type row =
       { patterns : Pattern.t list
-      ; action : Core_ast.Unified.Expr.t
+      ; action : Expr.t
       }
 
     type t = row list
@@ -219,34 +221,34 @@ let rec convert_expr : ctx -> Core_ast.Unified.Expr.t -> (Expr.t, string) Result
     | Compilation.Occurrence.Path (field_idx, oc') ->
       Expr.GetField (expr, field_idx) |> oc_to_expr oc'
   in
+  let rec tree_to_expr
+    : Expr.t -> Type.unified_t -> Compilation.Tree.t -> (Expr.t, string) Result.t
+    =
+    fun root result_ty tree ->
+    match tree with
+    | Compilation.Tree.Leaf expr -> return expr
+    | Compilation.Tree.Fail ->
+      raise_s [%message "Internal compiler error: Fail node in match tree"]
+    | Compilation.Tree.Switch (branches, default, oc) ->
+      wrap_in_let (oc_to_expr oc root) (fun e ->
+        let%bind branches =
+          branches
+          |> List.fold_result ~init:[] ~f:(fun acc (i, subtree) ->
+            let%map expr_subtree = tree_to_expr root result_ty subtree in
+            (i, expr_subtree) :: acc)
+          >>| List.rev
+        in
+        let%map default =
+          match default with
+          | None -> return None
+          | Some subtree ->
+            let%map expr_subtree = tree_to_expr root result_ty subtree in
+            Some expr_subtree
+        in
+        Expr.Switch (Expr.GetTag e, branches, default, result_ty))
+    | Compilation.Tree.Swap (tree, _) -> tree_to_expr root result_ty tree
+  in
   fun ctx ->
-    let rec tree_to_expr
-      : Expr.t -> Type.unified_t -> Compilation.Tree.t -> (Expr.t, string) Result.t
-      =
-      fun root result_ty tree ->
-      match tree with
-      | Compilation.Tree.Leaf e -> convert_expr ctx e
-      | Compilation.Tree.Fail ->
-        raise_s [%message "Internal compiler error: Fail node in match tree"]
-      | Compilation.Tree.Switch (branches, default, oc) ->
-        wrap_in_let (oc_to_expr oc root) (fun e ->
-          let%bind branches =
-            branches
-            |> List.fold_result ~init:[] ~f:(fun acc (i, subtree) ->
-              let%map expr_subtree = tree_to_expr root result_ty subtree in
-              (i, expr_subtree) :: acc)
-            >>| List.rev
-          in
-          let%map default =
-            match default with
-            | None -> return None
-            | Some subtree ->
-              let%map expr_subtree = tree_to_expr root result_ty subtree in
-              Some expr_subtree
-          in
-          Expr.Switch (Expr.GetTag e, branches, default, result_ty))
-      | Compilation.Tree.Swap (tree, _) -> tree_to_expr root result_ty tree
-    in
     let module O = Core_ast.Unified.Expr in
     let open Expr in
     let convert_exprs exprs =
@@ -276,7 +278,13 @@ let rec convert_expr : ctx -> Core_ast.Unified.Expr.t -> (Expr.t, string) Result
       Let (ident, expr_binding, expr_body, scheme)
     | O.Match (expr_scrutinee, arms, ty) ->
       let%bind expr_scrutinee = convert_expr ctx expr_scrutinee in
-      let mat = _ in
+      let%bind mat =
+        arms
+        |> List.fold_result ~init:[] ~f:(fun acc (pat, expr) ->
+          let%map action = convert_expr ctx expr in
+          let patterns = [ Compilation.Pattern.of_pat ctx pat ] in
+          { Compilation.Matrix.patterns;  action; } :: acc) >>| List.rev
+      in
       let ocs = [ Compilation.Occurrence.Root ] in
       let tree = Compilation.compile ocs mat in
       tree_to_expr expr_scrutinee ty tree
