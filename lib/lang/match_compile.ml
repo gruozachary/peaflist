@@ -22,7 +22,8 @@ module Ast = struct
       | None -> raise_s [%message "Internal compiler error: Unknown type"]
     ;;
 
-    let rec ty_of (rename : Rename.t) (expr : t) =
+    let rec ty_of : Rename.t -> t -> Type.phantom_unified Type.t=
+      fun rename expr ->
       match expr with
       | Int _ -> get_int rename
       | Ident (_, ty) -> ty
@@ -248,7 +249,16 @@ let rec convert_expr
     match oc with
     | Compilation.Occurrence.Root -> expr
     | Compilation.Occurrence.Path (field_idx, oc') ->
-      Expr.GetField (expr, field_idx, _) |> oc_to_expr oc'
+      let ty = Expr.ty_of rename expr in
+      let ty_next =
+        match ty with
+        | Type.Gen _ -> assert false
+        | Type.Fun (_, _) -> assert false
+        | Type.Prod tys -> List.nth_exn tys field_idx
+        | Type.Con (_, tys) -> List.nth_exn tys field_idx
+        | Type.Uni _ -> assert false
+      in
+      Expr.GetField (expr, field_idx, ty_next) |> oc_to_expr oc'
   in
   let rec tree_to_expr
     : Expr.t -> Type.unified_t -> Compilation.Tree.t -> (Expr.t, string) Result.t
