@@ -12,8 +12,30 @@ module Ast = struct
       | Let of Var_ident.t * t * t * Scheme.unified_t
       | Tuple of t List.t * Type.unified_t
       | GetTag of t
-      | GetField of t * int
+      | GetField of t * int * Type.unified_t
       | Switch of t * (int * t) list * t option * Type.unified_t
+
+    let get_int : Rename.t -> Type.unified_t =
+      fun rename ->
+      match Rename.Renamer.fetch ~str:"int" rename.type_renamer with
+      | Some ident -> Type.Con (ident, [])
+      | None -> raise_s [%message "Internal compiler error: Unknown type"]
+    ;;
+
+    let rec ty_of (rename : Rename.t) (expr : t) =
+      match expr with
+      | Int _ -> get_int rename
+      | Ident (_, ty) -> ty
+      | Constr (_, _, ty) -> ty
+      | Apply (_, _, ty) -> ty
+      | Lambda (_, _, ty) -> ty
+      | Let (_, _, expr_body, _) -> ty_of rename expr_body
+      | Tuple (_, ty) -> ty
+      | GetTag _ -> get_int rename
+      | GetField (_, _, ty) -> ty
+      | Switch (_, _, _, ty) -> ty
+      | _ -> .
+    ;;
   end
 
   module Ty = Core_ast.Unified.Ty
@@ -208,18 +230,25 @@ module Compilation = struct
   ;;
 end
 
-let rec convert_expr : ctx -> Core_ast.Unified.Expr.t -> (Expr.t, string) Result.t =
+let rec convert_expr
+  : Rename.t -> ctx -> Core_ast.Unified.Expr.t -> (Expr.t, string) Result.t
+  =
+  fun rename ->
   let wrap_in_let
     : Expr.t -> (Expr.t -> (Expr.t, string) Result.t) -> (Expr.t, string) Result.t
     =
-    _
+    fun expr_assignee f ->
+    let ident = Rename.Renamer.fresh ~str:"v" rename.var_renamer in
+    let%map expr_body = f (Expr.Ident (ident, Expr.ty_of rename expr_assignee)) in
+    let scheme = Scheme.Forall ([], Expr.ty_of rename expr_body) in
+    Expr.Let (ident, expr_assignee, expr_body, scheme)
   in
   let rec oc_to_expr : Compilation.Occurrence.t -> Expr.t -> Expr.t =
     fun oc expr ->
     match oc with
     | Compilation.Occurrence.Root -> expr
     | Compilation.Occurrence.Path (field_idx, oc') ->
-      Expr.GetField (expr, field_idx) |> oc_to_expr oc'
+      Expr.GetField (expr, field_idx, _) |> oc_to_expr oc'
   in
   let rec tree_to_expr
     : Expr.t -> Type.unified_t -> Compilation.Tree.t -> (Expr.t, string) Result.t
@@ -254,7 +283,7 @@ let rec convert_expr : ctx -> Core_ast.Unified.Expr.t -> (Expr.t, string) Result
     let convert_exprs exprs =
       let%map exprs =
         List.fold_result exprs ~init:[] ~f:(fun acc expr ->
-          let%map expr = convert_expr ctx expr in
+          let%map expr = convert_expr rename ctx expr in
           expr :: acc)
       in
       List.rev exprs
@@ -266,24 +295,25 @@ let rec convert_expr : ctx -> Core_ast.Unified.Expr.t -> (Expr.t, string) Result
       let%map exprs = convert_exprs exprs in
       Constr (ident, exprs, ty)
     | O.Apply (expr_fun, expr_arg, ty) ->
-      let%bind expr_fun = convert_expr ctx expr_fun in
-      let%map expr_arg = convert_expr ctx expr_arg in
+      let%bind expr_fun = convert_expr rename ctx expr_fun in
+      let%map expr_arg = convert_expr rename ctx expr_arg in
       Apply (expr_fun, expr_arg, ty)
     | O.Lambda (ident, expr_body, ty) ->
-      let%map expr_body = convert_expr ctx expr_body in
+      let%map expr_body = convert_expr rename ctx expr_body in
       Lambda (ident, expr_body, ty)
     | O.Let (ident, expr_binding, expr_body, scheme) ->
-      let%bind expr_binding = convert_expr ctx expr_binding in
-      let%map expr_body = convert_expr ctx expr_body in
+      let%bind expr_binding = convert_expr rename ctx expr_binding in
+      let%map expr_body = convert_expr rename ctx expr_body in
       Let (ident, expr_binding, expr_body, scheme)
     | O.Match (expr_scrutinee, arms, ty) ->
-      let%bind expr_scrutinee = convert_expr ctx expr_scrutinee in
+      let%bind expr_scrutinee = convert_expr rename ctx expr_scrutinee in
       let%bind mat =
         arms
         |> List.fold_result ~init:[] ~f:(fun acc (pat, expr) ->
-          let%map action = convert_expr ctx expr in
+          let%map action = convert_expr rename ctx expr in
           let patterns = [ Compilation.Pattern.of_pat ctx pat ] in
-          { Compilation.Matrix.patterns;  action; } :: acc) >>| List.rev
+          { Compilation.Matrix.patterns; action } :: acc)
+        >>| List.rev
       in
       let ocs = [ Compilation.Occurrence.Root ] in
       let tree = Compilation.compile ocs mat in
@@ -294,10 +324,12 @@ let rec convert_expr : ctx -> Core_ast.Unified.Expr.t -> (Expr.t, string) Result
     | _ -> .
 ;;
 
-let convert_decl : ctx -> Core_ast.Unified.Decl.t -> (Decl.t * ctx, string) Result.t =
-  fun ctx -> function
+let convert_decl
+  : Rename.t -> ctx -> Core_ast.Unified.Decl.t -> (Decl.t * ctx, string) Result.t
+  =
+  fun rename ctx -> function
   | Core_ast.Unified.Decl.Val (ident, expr, scheme) ->
-    let%map expr = convert_expr ctx expr in
+    let%map expr = convert_expr rename ctx expr in
     Decl.Val (ident, expr, scheme), ctx
   | Core_ast.Unified.Decl.Type (ident, gen_vars, ctors, type_data) ->
     let tenv = Map.set ctx.tenv ~key:ident ~data:type_data in
@@ -310,13 +342,15 @@ let convert_decl : ctx -> Core_ast.Unified.Decl.t -> (Decl.t * ctx, string) Resu
     return (Decl.Type (ident, gen_vars, ctors, type_data), { tenv; cenv })
 ;;
 
-let convert_prog : ctx -> Core_ast.Unified.Prog.t -> (Prog.t * ctx, string) Result.t =
-  fun ctx (Core_ast.Unified.Prog.Decls (decls, ())) ->
+let convert_prog
+  : Rename.t -> ctx -> Core_ast.Unified.Prog.t -> (Prog.t * ctx, string) Result.t
+  =
+  fun rename ctx (Core_ast.Unified.Prog.Decls (decls, ())) ->
   let%map decls, ctx =
     List.fold_result
       ~init:([], ctx)
       ~f:(fun (decls_acc, ctx) decl ->
-        let%map decl, ctx = convert_decl ctx decl in
+        let%map decl, ctx = convert_decl rename ctx decl in
         decl :: decls_acc, ctx)
       decls
   in
