@@ -74,6 +74,23 @@ module Compilation = struct
         | Ctor _ -> false
         | Wildcard -> true
       ;;
+
+      let of_pat : ctx -> Core_ast.Unified.Pat.t -> t =
+        fun { cenv; _; }->
+        let rec go =
+          fun pat ->
+          match pat with
+          | Core_ast.Unified.Pat.Int (x, _) -> Ctor ({ tag = x; multiplicity = 0 }, [])
+          (* TODO: actually add variables *)
+          | Core_ast.Unified.Pat.Ident (_, _) -> Wildcard
+          | Core_ast.Unified.Pat.Tuple (pats, _) ->
+            Ctor ({ tag = 0; multiplicity = List.length pats }, pats |> List.map ~f:go)
+          | Core_ast.Unified.Pat.Constr (ident, pats, _) ->
+            let ctor_data = Map.find_exn cenv ident in
+            Ctor ({ tag = ctor_data.tag; multiplicity = List.length pats }, pats |> List.map ~f:go)
+        in
+        go
+      ;;
     end
 
     include T
@@ -260,7 +277,7 @@ let rec convert_expr : ctx -> Core_ast.Unified.Expr.t -> (Expr.t, string) Result
     | O.Match (expr_scrutinee, arms, ty) ->
       let%bind expr_scrutinee = convert_expr ctx expr_scrutinee in
       let mat = _ in
-      let ocs = _ in
+      let ocs = [ Compilation.Occurrence.Root ] in
       let tree = Compilation.compile ocs mat in
       tree_to_expr expr_scrutinee ty tree
     | O.Tuple (exprs, ty) ->
