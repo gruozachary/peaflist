@@ -11,8 +11,8 @@ module Ast = struct
       | Lambda of Var_ident.t * t * Type.unified_t
       | Let of Var_ident.t * t * t * Scheme.unified_t
       | Tuple of t List.t * Type.unified_t
-      | GetTag of Var_ident.t
-      | GetField of Var_ident.t * int
+      | GetTag of t
+      | GetField of t * int
       | Switch of t * (int * t) list * t option * Type.unified_t
   end
 
@@ -190,39 +190,83 @@ module Compilation = struct
 end
 
 let rec convert_expr : ctx -> Core_ast.Unified.Expr.t -> (Expr.t, string) Result.t =
-  fun ctx ->
-  let module O = Core_ast.Unified.Expr in
-  let open Expr in
-  let convert_exprs exprs =
-    let%map exprs =
-      List.fold_result exprs ~init:[] ~f:(fun acc expr ->
-        let%map expr = convert_expr ctx expr in
-        expr :: acc)
-    in
-    List.rev exprs
+  let wrap_in_let
+    : Expr.t -> (Expr.t -> (Expr.t, string) Result.t) -> (Expr.t, string) Result.t
+    =
+    _
   in
-  function
-  | O.Int (x, _) -> return (Int x)
-  | O.Ident (ident, ty) -> return (Ident (ident, ty))
-  | O.Constr (ident, exprs, ty) ->
-    let%map exprs = convert_exprs exprs in
-    Constr (ident, exprs, ty)
-  | O.Apply (expr_fun, expr_arg, ty) ->
-    let%bind expr_fun = convert_expr ctx expr_fun in
-    let%map expr_arg = convert_expr ctx expr_arg in
-    Apply (expr_fun, expr_arg, ty)
-  | O.Lambda (ident, expr_body, ty) ->
-    let%map expr_body = convert_expr ctx expr_body in
-    Lambda (ident, expr_body, ty)
-  | O.Let (ident, expr_binding, expr_body, scheme) ->
-    let%bind expr_binding = convert_expr ctx expr_binding in
-    let%map expr_body = convert_expr ctx expr_body in
-    Let (ident, expr_binding, expr_body, scheme)
-  | O.Match (expr_scrutinee, arms, ty) -> _
-  | O.Tuple (exprs, ty) ->
-    let%map exprs = convert_exprs exprs in
-    Tuple (exprs, ty)
-  | _ -> .
+  let rec oc_to_expr : Compilation.Occurrence.t -> Expr.t -> Expr.t =
+    fun oc expr ->
+    match oc with
+    | Compilation.Occurrence.Root -> expr
+    | Compilation.Occurrence.Path (field_idx, oc') ->
+      Expr.GetField (expr, field_idx) |> oc_to_expr oc'
+  in
+  fun ctx ->
+    let rec tree_to_expr
+      : Expr.t -> Type.unified_t -> Compilation.Tree.t -> (Expr.t, string) Result.t
+      =
+      fun root result_ty tree ->
+      match tree with
+      | Compilation.Tree.Leaf e -> convert_expr ctx e
+      | Compilation.Tree.Fail ->
+        raise_s [%message "Internal compiler error: Fail node in match tree"]
+      | Compilation.Tree.Switch (branches, default, oc) ->
+        wrap_in_let (oc_to_expr oc root) (fun e ->
+          let%bind branches =
+            branches
+            |> List.fold_result ~init:[] ~f:(fun acc (i, subtree) ->
+              let%map expr_subtree = tree_to_expr root result_ty subtree in
+              (i, expr_subtree) :: acc)
+            >>| List.rev
+          in
+          let%map default =
+            match default with
+            | None -> return None
+            | Some subtree ->
+              let%map expr_subtree = tree_to_expr root result_ty subtree in
+              Some expr_subtree
+          in
+          Expr.Switch (Expr.GetTag e, branches, default, result_ty))
+      | Compilation.Tree.Swap (tree, _) -> tree_to_expr root result_ty tree
+    in
+    let module O = Core_ast.Unified.Expr in
+    let open Expr in
+    let convert_exprs exprs =
+      let%map exprs =
+        List.fold_result exprs ~init:[] ~f:(fun acc expr ->
+          let%map expr = convert_expr ctx expr in
+          expr :: acc)
+      in
+      List.rev exprs
+    in
+    function
+    | O.Int (x, _) -> return (Int x)
+    | O.Ident (ident, ty) -> return (Ident (ident, ty))
+    | O.Constr (ident, exprs, ty) ->
+      let%map exprs = convert_exprs exprs in
+      Constr (ident, exprs, ty)
+    | O.Apply (expr_fun, expr_arg, ty) ->
+      let%bind expr_fun = convert_expr ctx expr_fun in
+      let%map expr_arg = convert_expr ctx expr_arg in
+      Apply (expr_fun, expr_arg, ty)
+    | O.Lambda (ident, expr_body, ty) ->
+      let%map expr_body = convert_expr ctx expr_body in
+      Lambda (ident, expr_body, ty)
+    | O.Let (ident, expr_binding, expr_body, scheme) ->
+      let%bind expr_binding = convert_expr ctx expr_binding in
+      let%map expr_body = convert_expr ctx expr_body in
+      Let (ident, expr_binding, expr_body, scheme)
+    | O.Match (expr_scrutinee, arms, ty) ->
+      let%bind expr_scrutinee = convert_expr ctx expr_scrutinee in
+      let mat = _ in
+      let ocs = _ in
+      let tree = Compilation.compile ocs mat in
+      tree_to_expr expr_scrutinee ty tree
+    | O.Tuple (exprs, ty) ->
+      let%map exprs = convert_exprs exprs in
+      Tuple (exprs, ty)
+    | _ -> .
 ;;
 
 let convert_decl : ctx -> Core_ast.Unified.Decl.t -> (Decl.t * ctx, string) Result.t =
