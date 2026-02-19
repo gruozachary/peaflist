@@ -70,7 +70,8 @@ type ctx =
       (Constr_ident.t, Core_ast.Unified.ctor_data, Constr_ident.comparator_witness) Map.t
   }
 
-let empty : unit -> ctx = fun () ->
+let empty : unit -> ctx =
+  fun () ->
   { tenv = Map.empty (module Type_ident); cenv = Map.empty (module Constr_ident) }
 ;;
 
